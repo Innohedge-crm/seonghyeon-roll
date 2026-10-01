@@ -1,0 +1,48 @@
+{
+  "name": "seonghyeon-roll",
+  "productName": "성현교회 출석부",
+  "version": "0.2.0",
+  "description": "성현교회 출석부 및 교인관리",
+  "main": "main.js",
+  "author": "성현교회 재정부",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "dist": "electron-builder --win",
+    "release": "electron-builder --win --publish always",
+    "gas": "node build-gas.js"
+  },
+  "devDependencies": {
+    "electron": "^33.2.0",
+    "electron-builder": "^25.1.8"
+  },
+  "build": {
+    "appId": "kr.seonghyeon.roll",
+    "productName": "성현교회 출석부",
+    "files": [
+      "main.js",
+      "preload.js",
+      "renderer/**"
+    ],
+    "win": {
+      "target": [
+        "nsis"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "shortcutName": "성현교회 출석부",
+      "artifactName": "SeonghyeonRoll-Setup-${version}.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "releaseType": "release"
+      }
+    ]
+  },
+  "dependencies": {
+    "electron-updater": "^6.3.9"
+  }
+}
