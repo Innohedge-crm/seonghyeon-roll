@@ -168,7 +168,23 @@ const today=()=>iso(new Date());
 const lastDow=(dow,from)=>{const d=parseD(from||today());d.setDate(d.getDate()-((d.getDay()-dow+7)%7));return iso(d)};
 const daysBetween=(a,b)=>Math.round((parseD(b)-parseD(a))/864e5);
 const monthsBetween=(a,b)=>{const A=parseD(a),B=parseD(b);let m=(B.getFullYear()-A.getFullYear())*12+B.getMonth()-A.getMonth();if(B.getDate()<A.getDate())m--;return m};
-const ageOf=(birth,at)=>birth?Math.floor(monthsBetween(birth,at||today())/12):null;
+const ageOf=(birth,at)=>/^\d{4}-\d{2}-\d{2}$/.test(birth||'')?Math.floor(monthsBetween(birth,at||today())/12):null;
+/* 생일: 'YYYY-MM-DD'(전체) · 'MM-DD'(월일) · 'MM'(월만) 세 가지 형태를 허용 */
+function normBirth(v){
+  v=String(v==null?'':v).trim();if(!v)return '';let m;const p2=x=>String(x).padStart(2,'0');
+  if((m=v.match(/^(\d{4})\s*[.\-\/년]\s*(\d{1,2})\s*[.\-\/월]\s*(\d{1,2})/)))return `${m[1]}-${p2(m[2])}-${p2(m[3])}`;
+  if((m=v.match(/^(\d{4})(\d{2})(\d{2})$/)))return `${m[1]}-${m[2]}-${m[3]}`;
+  if((m=v.match(/^(\d{1,2})\s*[.\-\/월]\s*(\d{1,2})\s*일?$/))&&+m[1]>=1&&+m[1]<=12)return `${p2(m[1])}-${p2(m[2])}`;
+  if((m=v.match(/^(\d{1,2})\s*월?$/))&&+m[1]>=1&&+m[1]<=12)return p2(m[1]);
+  return v;
+}
+function birthParts(b){b=String(b||'');let m;
+  if((m=b.match(/^(\d{4})-(\d{2})-(\d{2})$/)))return {y:+m[1],m:+m[2],d:+m[3]};
+  if((m=b.match(/^(\d{2})-(\d{2})$/)))return {m:+m[1],d:+m[2]};
+  if((m=b.match(/^(\d{1,2})$/))&&+m[1]>=1&&+m[1]<=12)return {m:+m[1]};
+  return {};}
+const bMonth=b=>birthParts(b).m||0, bDay=b=>birthParts(b).d||0;
+function fmtBirth(b){const p=birthParts(b);if(p.y)return `${p.y}.${pad(p.m)}.${pad(p.d)}`;if(p.d)return `${p.m}월 ${p.d}일`;if(p.m)return `${p.m}월`;return b||'';}
 const DOWK='일월화수목금토';
 const fmtK=s=>{if(!s)return'';const d=parseD(s);return `${d.getMonth()+1}.${d.getDate()}(${DOWK[d.getDay()]})`};
 const fmtY=s=>s?s.replace(/-/g,'.'):'';
@@ -465,7 +481,7 @@ R.dash=()=>{
   const longA=act.filter(m=>m.status!=='별명부'&&absence(m).days>=S().longMonths*30);
   const warnA=act.filter(m=>{const a=absence(m).days;return m.status!=='별명부'&&a>=S().warnWeeks*7&&a<S().longMonths*30});
   const mo=new Date().getMonth()+1;
-  const bd=act.filter(m=>m.birth&&+m.birth.slice(5,7)===mo).sort((a,b)=>a.birth.slice(8).localeCompare(b.birth.slice(8)));
+  const bd=act.filter(m=>bMonth(m.birth)===mo).sort((a,b)=>(bDay(a.birth)||99)-(bDay(b.birth)||99));
   return `${demoBanner()}<div class="head"><div><h1>${esc(S().churchName)} 현황</h1><p>${fmtY(T)} 기준 · 지난 주일 ${fmtK(lastSun)}</p></div>
   <div class="row"><button class="btn pri" data-act="go" data-v="att">출석체크 시작</button></div></div>
   <div class="kpis">
@@ -485,7 +501,7 @@ R.dash=()=>{
       <div><span>6개월 이상 결석 (정관 제9조 별명부 대상)</span><button class="btn sm" data-act="go" data-v="abs">${longA.length}명</button></div>
       <div><span>${mo}월 생일</span><button class="btn sm" data-act="go" data-v="bday">${bd.length}명</button></div>
     </div>
-    ${bd.length?`<p class="muted" style="margin:10px 0 0">${bd.slice(0,12).map(m=>`${esc(m.name)} ${+m.birth.slice(8)}일${m.lunar?'(음)':''}`).join(' · ')}</p>`:''}
+    ${bd.length?`<p class="muted" style="margin:10px 0 0">${bd.slice(0,12).map(m=>`${esc(m.name)}${bDay(m.birth)?' '+bDay(m.birth)+'일':''}${m.lunar?'(음)':''}`).join(' · ')}</p>`:''}
     </div>
   </div>`;
 };
@@ -563,7 +579,7 @@ function memFiltered(){
 function renderMemBody(){
   const rows=memFiltered();
   $('#memBody').innerHTML=rows.map(m=>{const r=sundayRate(m,6);const ab=absence(m);
-    return `<tr class="click" data-act="openMember" data-id="${m.id}" tabindex="0"><td><b>${esc(m.name)}</b> <span class="muted">${esc(m.gender||'')}</span></td><td>${esc(m.title)}</td><td>${esc(m.district)}</td><td>${esc(m.society)}</td><td>${esc((m.ministries||[]).join(', '))}</td><td>${m.birth?m.birth.slice(5).replace('-','.')+(m.lunar?' (음)':''):''}</td><td>${fmtY(m.regDate)}</td><td>${pill(m.status,STATUS_PILL[m.status])}</td><td>${ab.last?fmtK(ab.last):'<span class="muted">없음</span>'}</td><td class="num">${r.total?Math.round(r.rate*100)+'%':'-'}</td></tr>`}).join('')||`<tr><td colspan="10" class="empty">교인이 없습니다</td></tr>`;
+    return `<tr class="click" data-act="openMember" data-id="${m.id}" tabindex="0"><td><b>${esc(m.name)}</b> <span class="muted">${esc(m.gender||'')}</span></td><td>${esc(m.title)}</td><td>${esc(m.district)}</td><td>${esc(m.society)}</td><td>${esc((m.ministries||[]).join(', '))}</td><td>${m.birth?(bDay(m.birth)?bMonth(m.birth)+'.'+bDay(m.birth):bMonth(m.birth)?bMonth(m.birth)+'월':esc(m.birth))+(m.lunar?' (음)':''):''}</td><td>${fmtY(m.regDate)}</td><td>${pill(m.status,STATUS_PILL[m.status])}</td><td>${ab.last?fmtK(ab.last):'<span class="muted">없음</span>'}</td><td class="num">${r.total?Math.round(r.rate*100)+'%':'-'}</td></tr>`}).join('')||`<tr><td colspan="10" class="empty">교인이 없습니다</td></tr>`;
 }
 after.mem=()=>{renderMemBody();
   $('#memQ').oninput=e=>{UI.mem.q=e.target.value;renderMemBody()};
@@ -574,7 +590,7 @@ function memberForm(m){
   return `<div class="form">
   <label>이름 *<input type="text" name="name" value="${esc(m.name)}" required></label>
   <label>성별<select name="gender">${opts(['남','여'],m.gender,'-')}</select></label>
-  <label>생년월일<input type="date" name="birth" value="${esc(m.birth)}"></label>
+  <label>생년월일<input type="text" name="birth" value="${esc(m.birth)}" placeholder="1976-09-15 또는 9 (월만)"></label>
   <label>양/음력<select name="lunar"><option value="0">양력</option><option value="1" ${m.lunar?'selected':''}>음력</option></select></label>
   <label>연락처<input type="tel" name="phone" value="${esc(m.phone)}"></label>
   <label>직분<select name="title">${opts(s.titles,m.title,'-')}</select></label>
@@ -594,7 +610,7 @@ function memberForm(m){
 }
 function readForm(root){
   const o={};root.querySelectorAll('[name]').forEach(el=>{if(el.type==='checkbox'){(o[el.name]=o[el.name]||[]);if(el.checked)o[el.name].push(el.value)}else o[el.name]=el.value.trim()});
-  o.lunar=o.lunar==='1';o.ministries=o.ministries||[];return o;
+  o.lunar=o.lunar==='1';if('birth' in o)o.birth=normBirth(o.birth);o.ministries=o.ministries||[];return o;
 }
 function editMember(id){
   const m=id?memberById(id):null;
@@ -622,7 +638,7 @@ function openMember(id){
     <div class="row">${pill(m.status,STATUS_PILL[m.status])} ${m.status==='준회원'?(el.ok?pill('정회원 심사 대상','ok'):pill('심사 전: '+el.why[0],'')):''} ${m.status==='정회원'?(voteRight(m)?pill('선거권 있음','ok'):pill('선거권 1년 미만','')):''}</div></div>
     <div class="row"><button class="btn" data-act="editMember" data-id="${id}">정보 수정</button><button class="btn" data-act="close">닫기</button></div></div>
     <div class="form" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
-      <label>생년월일<span>${fmtY(m.birth)||'-'} ${m.lunar?'(음)':''} ${m.birth?`만 ${ageOf(m.birth)}세`:''}</span></label>
+      <label>생년월일<span>${fmtBirth(m.birth)||'-'} ${m.lunar?'(음)':''} ${ageOf(m.birth)!=null?`만 ${ageOf(m.birth)}세`:''}</span></label>
       <label>연락처<span>${esc(m.phone)||'-'}</span></label>
       <label>등록일<span>${fmtY(m.regDate)||'-'}</span></label>
       <label>세례<span>${esc(m.baptism)} ${fmtY(m.baptismDate)}</span></label>
@@ -668,7 +684,7 @@ R.member=()=>{
   </tbody></table></div></div>
   <div class="panel"><h2>정회원 ${full.length}명 · 공동의회 회원 ${asm.length}명 · 선거권 ${full.filter(voteRight).length}명</h2>
   <div class="tbl-wrap"><table><thead><tr><th>이름</th><th>직분</th><th>구역</th><th>승인일</th><th>공동의회</th><th>선거권</th></tr></thead><tbody>
-  ${full.sort((a,b)=>ko(a.name,b.name)).map(m=>{const a=ageOf(m.birth);return `<tr class="click" data-act="openMember" data-id="${m.id}"><td>${esc(m.name)}</td><td>${esc(m.title)}</td><td>${esc(m.district)}</td><td>${fmtY(m.approvedDate)||'-'}</td><td>${a==null?pill('생년월일 없음','warn'):a>=s.assemblyAge?'○':'만 '+a+'세'}</td><td>${voteRight(m)?'○':'-'}</td></tr>`}).join('')}
+  ${full.sort((a,b)=>ko(a.name,b.name)).map(m=>{const a=ageOf(m.birth);return `<tr class="click" data-act="openMember" data-id="${m.id}"><td>${esc(m.name)}</td><td>${esc(m.title)}</td><td>${esc(m.district)}</td><td>${fmtY(m.approvedDate)||'-'}</td><td>${a==null?pill('출생연도 미상','warn'):a>=s.assemblyAge?'○':'만 '+a+'세'}</td><td>${voteRight(m)?'○':'-'}</td></tr>`}).join('')}
   </tbody></table></div></div>`;
 };
 after.member=()=>{const all=$('#chkAll');if(all)all.onchange=()=>document.querySelectorAll('.chkM:not(:disabled)').forEach(c=>c.checked=all.checked)};
@@ -791,12 +807,12 @@ async function importOffSheet(){
 
 /* ============ 생일 ============ */
 R.bday=()=>{
-  const mo=UI.bday.month;const list=activeMembers().filter(m=>m.birth&&+m.birth.slice(5,7)===mo).sort((a,b)=>a.birth.slice(8).localeCompare(b.birth.slice(8)));
-  return `<div class="head"><div><h1>${mo}월 생일</h1><p>${list.length}명 · 음력 생일은 표시된 날짜를 그대로 보여줍니다</p></div>
+  const mo=UI.bday.month;const list=activeMembers().filter(m=>bMonth(m.birth)===mo).sort((a,b)=>(bDay(a.birth)||99)-(bDay(b.birth)||99));
+  return `<div class="head"><div><h1>${mo}월 생일</h1><p>${list.length}명 · 음력 생일은 적힌 날짜 그대로, 월만 입력한 교인은 '날짜 미상'으로 표시</p></div>
   <div class="row"><button class="btn" data-act="exp" data-r="birthday" data-f="xlsx">Excel</button><button class="btn" data-act="exp" data-r="birthday" data-f="pdf">PDF</button></div></div>
   <div class="toolbar"><div class="seg">${Array.from({length:12},(_,i)=>`<button data-act="bdMonth" data-k="${i+1}" aria-pressed="${mo===i+1}">${i+1}월</button>`).join('')}</div></div>
   <div class="tbl-wrap"><table><thead><tr><th>날짜</th><th>이름</th><th>직분</th><th>구역</th><th>나이</th><th>연락처</th></tr></thead><tbody>
-  ${list.map(m=>`<tr class="click" data-act="openMember" data-id="${m.id}"><td>${+m.birth.slice(8)}일 ${m.lunar?pill('음력','info'):''}</td><td>${esc(m.name)}</td><td>${esc(m.title)}</td><td>${esc(m.district)}</td><td>만 ${ageOf(m.birth,new Date().getFullYear()+'-12-31')}세</td><td>${esc(m.phone)}</td></tr>`).join('')||'<tr><td colspan="6" class="empty">생일자가 없습니다</td></tr>'}</tbody></table></div>`;
+  ${list.map(m=>`<tr class="click" data-act="openMember" data-id="${m.id}"><td>${bDay(m.birth)?bDay(m.birth)+'일':'<span class="muted">날짜 미상</span>'} ${m.lunar?pill('음력','info'):''}</td><td>${esc(m.name)}</td><td>${esc(m.title)}</td><td>${esc(m.district)}</td><td>${ageOf(m.birth)!=null?'만 '+ageOf(m.birth,new Date().getFullYear()+'-12-31')+'세':'-'}</td><td>${esc(m.phone)}</td></tr>`).join('')||'<tr><td colspan="6" class="empty">생일자가 없습니다</td></tr>'}</tbody></table></div>`;
 };
 
 /* ============ 출석부 · 출력 ============ */
@@ -838,7 +854,7 @@ function buildReport(kind,arg){
   if(kind==='members'){
     const list=activeMembers().slice().sort(byDist);
     return {title:`${church} 교인명부`,sub:`${fmtY(T)} 기준 · ${list.length}명`,cols:['번호','이름','성별','생년월일','직분','구역','전도회','봉사','연락처','등록일','세례','상태'],
-      rows:list.map((m,i)=>[i+1,m.name,m.gender||'',(m.birth?fmtY(m.birth):'')+(m.lunar?'(음)':''),m.title||'',m.district||'',m.society||'',(m.ministries||[]).join(', '),m.phone||'',fmtY(m.regDate),m.baptism||'',m.status]),landscape:true,sheet:'교인명부'};
+      rows:list.map((m,i)=>[i+1,m.name,m.gender||'',fmtBirth(m.birth)+(m.lunar?'(음)':''),m.title||'',m.district||'',m.society||'',(m.ministries||[]).join(', '),m.phone||'',fmtY(m.regDate),m.baptism||'',m.status]),landscape:true,sheet:'교인명부'};
   }
   if(kind==='assembly'){
     const list=activeMembers().filter(m=>m.status==='정회원'&&(ageOf(m.birth)==null||ageOf(m.birth)>=s.assemblyAge)).sort((a,b)=>ko(a.name,b.name));
@@ -862,8 +878,8 @@ function buildReport(kind,arg){
       rows:list.map((m,i)=>{const o=idx().off.get(m.id)||new Map();const ds=dates.filter(d=>o.has(d));const cats=new Set();let t=0;ds.forEach(d=>o.get(d).forEach(c=>{cats.add(shortCat(c));if(/십일조/.test(c))t++}));return [i+1,m.name,m.district||'',ds.length,dates.length?Math.round(ds.length/dates.length*100)+'%':'',t,[...cats].join(', ')]}),sheet:'헌금생활'};
   }
   if(kind==='birthday'){
-    const mo=UI.bday.month;const list=activeMembers().filter(m=>m.birth&&+m.birth.slice(5,7)===mo).sort((a,b)=>a.birth.slice(8).localeCompare(b.birth.slice(8)));
-    return {title:`${church} ${mo}월 생일자`,sub:`${list.length}명`,cols:['일','이름','양/음','직분','구역','연락처'],rows:list.map(m=>[+m.birth.slice(8),m.name,m.lunar?'음력':'양력',m.title||'',m.district||'',m.phone||'']),sheet:mo+'월생일'};
+    const mo=UI.bday.month;const list=activeMembers().filter(m=>bMonth(m.birth)===mo).sort((a,b)=>(bDay(a.birth)||99)-(bDay(b.birth)||99));
+    return {title:`${church} ${mo}월 생일자`,sub:`${list.length}명`,cols:['일','이름','양/음','직분','구역','연락처'],rows:list.map(m=>[bDay(m.birth)||'미상',m.name,m.lunar?'음력':'양력',m.title||'',m.district||'',m.phone||'']),sheet:mo+'월생일'};
   }
 }
 function toSheet(r){
@@ -943,7 +959,7 @@ after.set=()=>{
 };
 function normalize(d){
   const db=Object.assign(blankDB(),d||{});db.settings=Object.assign(DEFAULT_SETTINGS(),db.settings||{});
-  db.members=(db.members||[]).map(m=>Object.assign({ministries:[],deleted:false},m,{status:(!m.status||m.status==='재적')?'준회원':m.status,ministries:Array.isArray(m.ministries)?m.ministries:String(m.ministries||'').split(',').map(x=>x.trim()).filter(Boolean)}));db.attendance=db.attendance||{};db.offerings=db.offerings||{};db.logs=db.logs||[];db.local=db.local||{};return db;
+  db.members=(db.members||[]).map(m=>Object.assign({ministries:[],deleted:false},m,{birth:normBirth(m.birth),status:(!m.status||m.status==='재적')?'준회원':m.status,ministries:Array.isArray(m.ministries)?m.ministries:String(m.ministries||'').split(',').map(x=>x.trim()).filter(Boolean)}));db.attendance=db.attendance||{};db.offerings=db.offerings||{};db.logs=db.logs||[];db.local=db.local||{};return db;
 }
 function stripLocal(db){const o=Object.assign({},db);delete o.local;return o}
 async function sync(){
