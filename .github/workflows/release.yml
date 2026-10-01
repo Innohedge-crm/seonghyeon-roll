@@ -25,6 +25,7 @@ jobs:
         run: |
           mkdir -p renderer/vendor
           [ -f renderer/vendor/xlsx.full.min.js ] || curl -fsSL -o renderer/vendor/xlsx.full.min.js https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js
+          [ -f renderer/vendor/qrcode.js ] || (npm pack qrcode-generator@1.4.4 --silent && tar -xzf qrcode-generator-1.4.4.tgz && cp package/qrcode.js renderer/vendor/qrcode.js && rm -rf package qrcode-generator-1.4.4.tgz)
       - run: npm run release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
