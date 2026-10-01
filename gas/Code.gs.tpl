@@ -80,6 +80,19 @@ function normDate_(v) {
   if (m) return m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
   return v;
 }
+function normBirth_(v) {
+  // 생일: 전체(1976-09-15) · 월일(09-15) · 월만(09) 허용
+  v = String(v || '').trim();
+  if (!v) return '';
+  const p2 = x => ('0' + x).slice(-2);
+  let m = v.match(/^(\d{4})\s*[.\-\/년]\s*(\d{1,2})\s*[.\-\/월]\s*(\d{1,2})/) || v.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (m) return m[1] + '-' + p2(m[2]) + '-' + p2(m[3]);
+  m = v.match(/^(\d{1,2})\s*[.\-\/월]\s*(\d{1,2})\s*일?$/);
+  if (m && +m[1] >= 1 && +m[1] <= 12) return p2(m[1]) + '-' + p2(m[2]);
+  m = v.match(/^(\d{1,2})\s*월?$/);
+  if (m && +m[1] >= 1 && +m[1] <= 12) return p2(m[1]);
+  return v;
+}
 function normPhone_(v) {
   let d = String(v || '').replace(/[^\d]/g, '');
   if (!d) return String(v || '').trim();
@@ -112,7 +125,8 @@ function readMembers_() {
     m.id = id;
     m.name = name.replace(/\s+/g, '');
     m.updatedAt = upd;
-    ['birth', 'regDate', 'baptismDate', 'eduDate', 'approvedDate'].forEach(k => { m[k] = normDate_(m[k]); });
+    ['regDate', 'baptismDate', 'eduDate', 'approvedDate'].forEach(k => { m[k] = normDate_(m[k]); });
+    m.birth = normBirth_(m.birth);
     m.phone = normPhone_(m.phone);
     m.lunar = /음|TRUE|Y/i.test(m.lunar);
     m.deleted = /^(Y|TRUE|삭제)$/i.test(m.deleted);
