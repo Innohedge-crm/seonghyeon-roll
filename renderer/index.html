@@ -942,7 +942,7 @@ after.set=()=>{
 };
 function normalize(d){
   const db=Object.assign(blankDB(),d||{});db.settings=Object.assign(DEFAULT_SETTINGS(),db.settings||{});
-  db.members=db.members||[];db.attendance=db.attendance||{};db.offerings=db.offerings||{};db.logs=db.logs||[];db.local=db.local||{};return db;
+  db.members=(db.members||[]).map(m=>Object.assign({ministries:[],deleted:false},m,{status:m.status||'재적',ministries:Array.isArray(m.ministries)?m.ministries:String(m.ministries||'').split(',').map(x=>x.trim()).filter(Boolean)}));db.attendance=db.attendance||{};db.offerings=db.offerings||{};db.logs=db.logs||[];db.local=db.local||{};return db;
 }
 function stripLocal(db){const o=Object.assign({},db);delete o.local;return o}
 async function sync(){
@@ -953,7 +953,7 @@ async function sync(){
     toast('동기화 중…');
     const res=JSON.parse(await Host.http(L.sheetUrl,{method:'POST',body:JSON.stringify({action:'push',key:L.key||'',data:stripLocal(DB)})}));
     if(!res.ok)throw new Error(res.error==='key'?'비밀번호가 다릅니다':res.error);
-    const local=DB.local;DB=normalize(mergeData(DB,res.data));DB.local=local;DB.local.lastSync=now();commit();render();toast('구글시트와 동기화했습니다');
+    const before=members().length;const local=DB.local;DB=normalize(mergeData(DB,res.data));DB.local=local;DB.local.lastSync=now();commit();render();const added=members().length-before;toast(`구글시트와 동기화했습니다 · 교인 ${members().length}명${added>0?` (새로 ${added}명)`:''}`);
   }catch(e){toast('동기화 실패: '+(e.message||e))}
 }
 /* 구글 웹앱(태블릿)에서 실행될 때 */
