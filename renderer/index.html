@@ -183,12 +183,13 @@ const shortCat=c=>String(c).replace(/헌금$/,'').replace('구제/기타','구�
 /* ============ 공유 로직 (Apps Script와 동일 코드) ============ */
 function mergeData(a,b){
   a=a||{};b=b||{};const out={version:1};
+  const real=x=>x&&x.updatedAt!==1&&x.t!==1; /* 예시 데이터(수정시각 1)는 동기화하지 않음 */
   const sa=a.settings||{},sb=b.settings||{};
   out.settings=Object.assign({},(sb.updatedAt||0)>(sa.updatedAt||0)?sb:sa);
-  const mm={};[].concat(a.members||[],b.members||[]).forEach(m=>{if(!m||!m.id)return;const c=mm[m.id];if(!c||(m.updatedAt||0)>(c.updatedAt||0))mm[m.id]=m});
+  const mm={};[].concat(a.members||[],b.members||[]).forEach(m=>{if(!real(m)||!m.id)return;const c=mm[m.id];if(!c||(m.updatedAt||0)>(c.updatedAt||0))mm[m.id]=m});
   out.members=Object.keys(mm).map(k=>mm[k]);
-  ['attendance','offerings'].forEach(f=>{out[f]={};[a[f]||{},b[f]||{}].forEach(o=>Object.keys(o).forEach(k=>{const c=out[f][k];if(!c||(o[k].t||0)>(c.t||0))out[f][k]=o[k]}))});
-  const ll={};[].concat(a.logs||[],b.logs||[]).forEach(l=>{if(!l||!l.id)return;const c=ll[l.id];if(!c||(l.t||0)>(c.t||0))ll[l.id]=l});
+  ['attendance','offerings'].forEach(f=>{out[f]={};[a[f]||{},b[f]||{}].forEach(o=>Object.keys(o).forEach(k=>{if(!real(o[k]))return;const c=out[f][k];if(!c||(o[k].t||0)>(c.t||0))out[f][k]=o[k]}))});
+  const ll={};[].concat(a.logs||[],b.logs||[]).forEach(l=>{if(!real(l)||!l.id)return;const c=ll[l.id];if(!c||(l.t||0)>(c.t||0))ll[l.id]=l});
   out.logs=Object.keys(ll).map(k=>ll[k]);
   return out;
 }
