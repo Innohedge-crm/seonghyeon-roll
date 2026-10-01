@@ -3,7 +3,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Batang:wght@700&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script>if(!window.XLSX&&location.protocol==="file:")document.write('<script src="vendor/xlsx.full.min.js"><\/script>')</script>
+<script>if(!window.XLSX&&/^(file|http):$/.test(location.protocol))document.write('<script src="vendor/xlsx.full.min.js"><\/script>')</script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js"></script>
+<script>if(!window.qrcode&&/^(file|http):$/.test(location.protocol))document.write('<script src="vendor/qrcode.js"><\/script>')</script>
 <style>
 /* Layout: 좌측 고정 메뉴 + 작업 영역. 좁은 화면에서는 메뉴가 상단 가로 스크롤로 바뀜. 출석체크는 큰 탭 카드 격자. */
 :root{
@@ -148,6 +150,7 @@ body.tablet .card .nm{font-size:21px}
   .cards{grid-template-columns:repeat(auto-fill,minmax(108px,1fr))}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+body.tablet-client [data-act="exp"],body.tablet-client [data-act="clearDemo"],body.tablet-client [data-act="delMember"]{display:none}
 </style>
 
 <div class="app">
@@ -236,14 +239,16 @@ function parseOfferingGrid(grid,fallbackDate){
 const LSKEY='seonghyeon-roll-v1';
 const ls={get(k){try{return localStorage.getItem(k)}catch(e){return null}},set(k,v){try{localStorage.setItem(k,v);return true}catch(e){return false}}};
 const Host={
-  kind: window.churchAPI?'electron':(window.google&&google.script&&google.script.run)?'gas':'web',
+  kind: window.churchAPI?'electron':(window.google&&google.script&&google.script.run)?'gas':(location.protocol==='http:'&&/[?&]t=/.test(location.search))?'lan':'web',
   isArtifact(){return !!(window.claude&&typeof window.claude.use==='function')},
   async load(){
     if(this.kind==='electron')return await churchAPI.loadData();
+    if(this.kind==='lan')return await lanLoad();
     const s=ls.get(LSKEY);return s?JSON.parse(s):null;
   },
   async save(db){
     if(this.kind==='electron')return churchAPI.saveData(db);
+    if(this.kind==='lan')return lanPushSoon();
     ls.set(LSKEY,JSON.stringify(db));
     if(this.kind==='gas')gasPushSoon();
   },
@@ -268,6 +273,30 @@ const Host={
     return await r.text();
   }
 };
+
+/* ============ 같은 와이파이 태블릿 (데스크탑에 QR로 연결) ============ */
+const LAN_T=(new URLSearchParams(location.search)).get('t')||'';
+const TABLET_VIEWS=new Set(['dash','att','mem']);
+const isTablet=()=>Host.kind==='lan'||Host.kind==='gas';
+let lanRev=0,lanTimer=null,lanBusy=false,lanOnline=true;
+async function lanFetch(path,opt){const r=await fetch(path+(path.includes('?')?'&':'?')+'t='+encodeURIComponent(LAN_T),Object.assign({cache:'no-store'},opt||{}));if(r.status===401)throw new Error('연결 코드가 맞지 않습니다. 데스크탑의 QR을 다시 찍어 주세요');if(!r.ok)throw new Error('데스크탑 응답 '+r.status);return r.json()}
+async function lanLoad(){const j=await lanFetch('/api/data');lanRev=j.rev||0;return j.data}
+function lanPushSoon(){clearTimeout(lanTimer);lanTimer=setTimeout(lanPush,700)}
+async function lanPush(){
+  lanBusy=true;
+  try{const j=await lanFetch('/api/data',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(stripLocal(DB))});
+    const local=DB.local;DB=normalize(mergeData(DB,j.data));DB.local=local;IDX=null;lanRev=j.rev||lanRev;setLan(true);}
+  catch(e){setLan(false);toast('데스크탑에 저장하지 못했습니다. 와이파이와 데스크탑 프로그램을 확인하세요');}
+  lanBusy=false;
+}
+function setLan(on){lanOnline=on;const f=$('#syncState');if(f)f.innerHTML=syncLabel()}
+async function lanPoll(){
+  if(lanBusy)return;
+  try{const j=await lanFetch('/api/rev');setLan(true);
+    if(j.rev&&j.rev!==lanRev&&!lanBusy){const d=await lanLoad();const local=DB.local;DB=normalize(mergeData(DB,d));DB.local=local;IDX=null;
+      const a=document.activeElement;if(!(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)))render();else renderNav();}}
+  catch(e){setLan(false)}
+}
 
 /* ============ 기본 데이터 ============ */
 const DEFAULT_SETTINGS=()=>({
@@ -354,7 +383,7 @@ const svcList=()=>S().services;
 const svcBy=k=>svcList().find(s=>s.key===k);
 const sunKeys=()=>svcList().filter(s=>s.dow===0).map(s=>s.key);
 const UI={view:'dash',
-  att:{svc:null,date:null,q:'',district:'',show:'all',sort:'district'},
+  att:{svc:null,date:null,q:'',district:'',show:'all',sort:'name'},
   mem:{q:'',status:'active',district:'',title:'',society:''},
   roll:{month:today().slice(0,7),svc:'sun'},
   abs:{tab:'absent'},
@@ -444,7 +473,8 @@ const VIEWS=[
 function renderNav(){
   const counts=navCounts();
   $('#nav').innerHTML=`<div class="brand"><b>${esc(S().churchName)}</b><small>출석부 · 교인관리</small></div>`+
-    VIEWS.map(([k,l])=>k==='--'?`<div class="grp">${l}</div>`:`<button data-act="go" data-v="${k}" ${UI.view===k?'aria-current="page"':''}><span>${l}</span>${counts[k]?`<span class="cnt">${counts[k]}</span>`:''}</button>`).join('')+
+    VIEWS.filter(([k])=>!isTablet()||TABLET_VIEWS.has(k)).map(([k,l])=>k==='--'?`<div class="grp">${l}</div>`:`<button data-act="go" data-v="${k}" ${UI.view===k?'aria-current="page"':''}><span>${l}</span>${counts[k]?`<span class="cnt">${counts[k]}</span>`:''}</button>`).join('')+
+    (Host.kind==='electron'?`<button data-act="lanOpen"><span>태블릿 연결 (QR)</span></button>`:'')+
     `<div class="foot" id="syncState">${syncLabel()}${verLabel()}</div>`;
 }
 function navCounts(){
@@ -456,6 +486,7 @@ function updateNavCounts(){renderNav()}
 function syncLabel(){
   const L=DB.local||{};
   if(Host.kind==='gas')return '구글시트에 자동 저장';
+  if(Host.kind==='lan')return lanOnline?'데스크탑과 연결됨 · 자동 저장':'데스크탑 연결 끊김 — 와이파이 확인';
   return L.lastSync?`시트 동기화 ${new Date(L.lastSync).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}`:(L.sheetUrl?'시트 동기화 전':'이 기기에만 저장');
 }
 function verLabel(){
@@ -464,7 +495,7 @@ function verLabel(){
   const st=u.state==='downloading'?` · 새 버전 받는 중${u.percent!=null?' '+u.percent+'%':''}`:u.state==='ready'?` · v${esc(u.version)} 설치 대기 (종료 시 설치)`:'';
   return `<br>v${esc(APPINFO.version)}${st}`;
 }
-function go(v){UI.view=v;render();window.scrollTo(0,0)}
+function go(v){if(isTablet()&&!TABLET_VIEWS.has(v))return;UI.view=v;render();window.scrollTo(0,0)}
 function render(){renderNav();$('#main').innerHTML=(R[UI.view]||R.dash)();after[UI.view]&&after[UI.view]()}
 const R={},after={};
 const demoBanner=()=>S().demo?`<div class="banner"><span>지금 보이는 교인과 출석은 <b>예시 데이터</b>입니다. 실제 명단은 교인 등록이나 헌금집계표 가져오기로 시작하세요.</span><button class="btn sm" data-act="clearDemo">예시 지우고 시작</button></div>`:'';
@@ -983,6 +1014,27 @@ function gasPush(loud){return new Promise(res=>{
 })}
 function gasPull(){return new Promise((res,rej)=>{google.script.run.withSuccessHandler(t=>{const r=JSON.parse(t);r.ok?res(r.data):rej(new Error(r.error))}).withFailureHandler(rej).apiPull((DB.local||{}).key||'')})}
 
+async function lanOpen(){
+  let info;
+  try{info=await churchAPI.lanStart()}catch(e){toast('연결을 시작하지 못했습니다: '+(e.message||e));return}
+  if(!info||!info.urls||!info.urls.length){modal(`<h3>태블릿 연결</h3><p>이 PC가 와이파이(공유기)에 연결되어 있지 않습니다. 네트워크를 확인한 뒤 다시 눌러 주세요.</p><div class="mfoot"><button class="btn" data-act="close">닫기</button></div>`);return}
+  const qr=u=>{if(typeof qrcode==='undefined')return '';const q=qrcode(0,'M');q.addData(u);q.make();return q.createSvgTag({cellSize:6,margin:2,scalable:true})};
+  const main=info.urls[0];
+  modal(`<h3>태블릿 연결</h3><p class="muted">태블릿을 이 PC와 <b>같은 와이파이</b>에 연결하고, 카메라로 QR을 찍으면 출석체크 화면이 열립니다. 태블릿에서는 현황 · 출석체크 · 교인관리만 보입니다.</p>
+  <div style="display:grid;place-items:center;margin:14px 0"><div style="width:240px;max-width:100%;background:#fff;padding:8px;border-radius:8px">${qr(main)}</div></div>
+  <p style="text-align:center;word-break:break-all"><b>${esc(main)}</b></p>
+  ${info.urls.length>1?`<p class="muted">연결이 안 되면 다른 주소: ${info.urls.slice(1).map(esc).join(' · ')}</p>`:''}
+  <p class="muted">처음 연결할 때 이 PC에 "Windows 보안 경고(방화벽)" 창이 뜨면 <b>개인 네트워크 허용</b>을 눌러 주세요. 이 PC의 프로그램이 켜져 있는 동안 연결됩니다.</p>
+  <div class="mfoot"><button class="btn danger" data-act="lanStop" style="margin-right:auto">연결 끄기</button><button class="btn pri" data-act="close">닫기</button></div>`);
+}
+function lanIncoming(data){
+  const before=JSON.stringify(stripLocal(DB)).length;
+  const local=DB.local;DB=normalize(mergeData(DB,data));DB.local=local;IDX=null;
+  churchAPI.saveData(DB);
+  const a=document.activeElement;if(!document.querySelector('.ov')&&!(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)))render();else renderNav();
+  return stripLocal(DB);
+}
+
 /* ============ 이벤트 ============ */
 const ACT={
   go:el=>go(el.dataset.v),
@@ -1008,6 +1060,8 @@ const ACT={
   rollSvc:el=>{UI.roll.svc=el.dataset.k;render()},
   exp:el=>exportReport(el.dataset.r,el.dataset.f),
   sync:()=>sync(),
+  lanOpen:()=>lanOpen(),
+  lanStop:async el=>{await churchAPI.lanStop();closeModal(el);toast('태블릿 연결을 껐습니다')},
   checkUpdate:()=>{if(window.churchAPI&&churchAPI.checkUpdate)churchAPI.checkUpdate()},
   backup:()=>Host.saveFile(`${S().churchName}_출석부_백업_${today().replace(/-/g,'')}.json`,JSON.stringify(stripLocal(DB),null,1)),
   clearDemo:async()=>{if(!await ask('예시 교인·출석·헌금 기록을 모두 지우고 빈 명단으로 시작합니다.','지우고 시작'))return;const keep=DB.local;const st=DB.settings;DB=blankDB();DB.settings=Object.assign(st,{demo:false,updatedAt:now()});DB.local=keep;commit();go('mem')},
@@ -1024,8 +1078,12 @@ document.addEventListener('keydown',e=>{
 (async function start(){
   let d=null;
   try{d=await Host.load()}catch(e){}
+  if(Host.kind==='electron'&&churchAPI.onLanIncoming)churchAPI.onLanIncoming(lanIncoming);
+  if(isTablet())document.body.classList.add('tablet-client');
+  if(Host.kind==='lan'){UI.view='att';setInterval(lanPoll,4000)}
   if(Host.kind==='electron'&&churchAPI.appInfo){try{APPINFO=await churchAPI.appInfo();churchAPI.onUpdate(u=>{UPD=u;const f=$('#syncState');if(f)f.innerHTML=syncLabel()+verLabel()})}catch(e){}}
-  DB=d?normalize(d):(Host.kind==='gas'?blankDB():demoDB());
+  if(Host.kind==='lan'&&!d)toast('데스크탑에 연결하지 못했습니다. 같은 와이파이인지, 데스크탑 프로그램이 켜져 있는지 확인하세요');
+  DB=d?normalize(d):((Host.kind==='gas'||Host.kind==='lan')?blankDB():demoDB());
   if(Host.kind==='gas'){
     if(!DB.local.key){
       render();
@@ -1034,7 +1092,7 @@ document.addEventListener('keydown',e=>{
     }
     try{const remote=await gasPull();const local=DB.local;if((remote.members||[]).length)DB=normalize(mergeData(DB,remote));DB.local=local;ls.set(LSKEY,JSON.stringify(DB));IDX=null}catch(e){toast('구글시트를 읽지 못했습니다: '+(e.message||e))}
   }
-  if(!d)Host.save(DB);
+  if(!d&&Host.kind!=='lan')Host.save(DB);
   render();
 })();
 </script>
