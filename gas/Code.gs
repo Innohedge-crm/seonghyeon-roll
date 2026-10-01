@@ -9,7 +9,7 @@
  *    태블릿은 같은 URL을 브라우저로 열고 KEY를 한 번 입력하면 탭 출석체크가 구글시트에 바로 저장됩니다.
  *
  * 시트 구성: 교인명부 / 출석 / 헌금생활 / 기록 / _설정  (처음 동기화할 때 자동 생성)
- * 교인명부 탭에는 직접 입력·붙여넣기 가능 (ID·수정시각·삭제 칸은 비워 두면 자동 기록, 상태가 비면 '재적')
+ * 교인명부 탭에는 직접 입력·붙여넣기 가능 (ID·수정시각·삭제 칸은 비워 두면 자동 기록, 상태가 비면 '준회원', 예전 '재적'도 준회원으로 처리)
  * 헌금생활은 참여 항목만 저장하며 금액은 저장하지 않습니다.
  */
 const KEY = '여기에-비밀번호를-입력';
@@ -117,7 +117,7 @@ function readMembers_() {
     m.lunar = /음|TRUE|Y/i.test(m.lunar);
     m.deleted = /^(Y|TRUE|삭제)$/i.test(m.deleted);
     m.ministries = m.ministries ? m.ministries.split(/[,、·\/]/).map(s => s.trim()).filter(String) : [];
-    if (!m.status) m.status = '재적';
+    if (!m.status || m.status === '재적') m.status = '준회원';
     if (m.gender) m.gender = /여|F/i.test(m.gender) ? '여' : /남|M/i.test(m.gender) ? '남' : m.gender;
     out.push(m);
   });

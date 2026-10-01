@@ -265,9 +265,9 @@ const DEFAULT_SETTINGS=()=>({
   offeringSheetId:'1SEj0VlbOC2xFh16rUCeN2VSQYF5Q7_Ib-t9PHmymHCs',
   demo:false, updatedAt:0
 });
-const STATUSES=['재적','정회원','별명부','정지','전출','소천','제명'];
-const ACTIVE=new Set(['재적','정회원','별명부','정지']);
-const STATUS_PILL={재적:'',정회원:'ok',별명부:'warn',정지:'bad',전출:'info',소천:'',제명:'bad'};
+const STATUSES=['준회원','정회원','별명부','정지','전출','소천','제명'];
+const ACTIVE=new Set(['준회원','정회원','별명부','정지']);
+const STATUS_PILL={준회원:'',정회원:'ok',별명부:'warn',정지:'bad',전출:'info',소천:'',제명:'bad'};
 const BAPT=['미세례','학습','유아세례','입교','세례'];
 
 function blankDB(){return {version:1,settings:DEFAULT_SETTINGS(),members:[],attendance:{},offerings:{},logs:[],local:{}}}
@@ -296,7 +296,7 @@ function demoDB(){
   }
   // 최근 등록자(심사 대상) 4명
   [[-230,'세례','',.9],[-120,'세례',-60,.85],[-200,'학습','',.8],[-75,'세례','',.95]].forEach((x,i)=>{
-    const m=db.members[28+i];m.title='성도';m.status='재적';m.approvedDate='';m.regDate=addDays(T,x[0]);m.baptism=x[1];m.eduDate=x[2]?addDays(T,x[2]):'';m._p=x[3];
+    const m=db.members[28+i];m.title='성도';m.status='준회원';m.approvedDate='';m.regDate=addDays(T,x[0]);m.baptism=x[1];m.eduDate=x[2]?addDays(T,x[2]):'';m._p=x[3];
   });
   // 장기결석 3명
   [5,14,27].forEach((i,k)=>{db.members[i]._stop=[40,110,200][k]});
@@ -432,7 +432,7 @@ function renderNav(){
     `<div class="foot" id="syncState">${syncLabel()}${verLabel()}</div>`;
 }
 function navCounts(){
-  const c={};c.member=activeMembers().filter(m=>m.status==='재적'&&eligibility(m).ok).length;
+  const c={};c.member=activeMembers().filter(m=>m.status==='준회원'&&eligibility(m).ok).length;
   c.abs=activeMembers().filter(m=>m.status!=='별명부'&&absence(m).days>=S().visitMonths*30).length;
   return c;
 }
@@ -461,7 +461,7 @@ R.dash=()=>{
   const per=k=>{const sv=svcBy(k);const d=lastDow(sv.dow,T);return ((DB.attendance[d+'|'+k]||{}).ids||[]).length};
   const weeks=[];for(let i=11;i>=0;i--){const d=addDays(lastSun,-7*i);weeks.push([d,uniq(d)])}
   const max=Math.max(10,...weeks.map(w=>w[1]));
-  const cand=act.filter(m=>m.status==='재적'&&eligibility(m).ok);
+  const cand=act.filter(m=>m.status==='준회원'&&eligibility(m).ok);
   const longA=act.filter(m=>m.status!=='별명부'&&absence(m).days>=S().longMonths*30);
   const warnA=act.filter(m=>{const a=absence(m).days;return m.status!=='별명부'&&a>=S().warnWeeks*7&&a<S().longMonths*30});
   const mo=new Date().getMonth()+1;
@@ -469,7 +469,7 @@ R.dash=()=>{
   return `${demoBanner()}<div class="head"><div><h1>${esc(S().churchName)} 현황</h1><p>${fmtY(T)} 기준 · 지난 주일 ${fmtK(lastSun)}</p></div>
   <div class="row"><button class="btn pri" data-act="go" data-v="att">출석체크 시작</button></div></div>
   <div class="kpis">
-    <div class="kpi"><span>재적 교인</span><b>${act.length}</b><small>정회원 ${act.filter(m=>m.status==='정회원').length}명</small></div>
+    <div class="kpi"><span>정회원 (재적회원)</span><b>${act.filter(m=>m.status==='정회원').length}</b><small>전체 교인 ${act.length}명 · 준회원 ${act.filter(m=>m.status==='준회원').length}명</small></div>
     <div class="kpi"><span>지난 주일 출석</span><b>${uniq(lastSun)}</b><small>${sunKeys().map(k=>svcBy(k).name.replace('주일 ','')+' '+per(k)).join(' · ')}</small></div>
     <div class="kpi"><span>수요예배 · 금요기도회</span><b>${per('wed')} · ${per('fri')}</b><small>최근 1회 기준</small></div>
     <div class="kpi"><span>살필 교인</span><b>${warnA.length+longA.length}</b><small>${S().warnWeeks}주 이상 결석 · 6개월 이상 ${longA.length}명</small></div>
@@ -550,7 +550,7 @@ function toggleAtt(id,btn){
 R.mem=()=>{const m=UI.mem;return `${demoBanner()}<div class="head"><div><h1>교인관리</h1><p>이름을 누르면 상세 정보 · 출석 · 헌금생활 · 기록을 볼 수 있습니다</p></div>
   <div class="row"><button class="btn" data-act="exp" data-r="members" data-f="xlsx">Excel</button><button class="btn" data-act="exp" data-r="members" data-f="pdf">PDF</button><button class="btn pri" data-act="editMember">+ 교인 등록</button></div></div>
   <div class="toolbar"><input type="text" id="memQ" class="grow" placeholder="이름·연락처 검색" value="${esc(m.q)}">
-  <select id="memStatus" aria-label="상태"><option value="active" ${m.status==='active'?'selected':''}>재적 전체</option><option value="all" ${m.status==='all'?'selected':''}>전체 (전출·소천 포함)</option>${STATUSES.map(s=>`<option ${m.status===s?'selected':''}>${s}</option>`).join('')}</select>
+  <select id="memStatus" aria-label="상태"><option value="active" ${m.status==='active'?'selected':''}>교인 전체</option><option value="all" ${m.status==='all'?'selected':''}>전체 (전출·소천 포함)</option>${STATUSES.map(s=>`<option ${m.status===s?'selected':''}>${s}</option>`).join('')}</select>
   <select id="memDist" aria-label="구역">${opts(S().districts,m.district,'전체 구역')}</select>
   <select id="memTitle" aria-label="직분">${opts(S().titles,m.title,'전체 직분')}</select>
   <select id="memSoc" aria-label="전도회">${opts(S().societies,m.society,'전체 전도회')}</select></div>
@@ -570,7 +570,7 @@ after.mem=()=>{renderMemBody();
   [['memStatus','status'],['memDist','district'],['memTitle','title'],['memSoc','society']].forEach(([id,k])=>$('#'+id).onchange=e=>{UI.mem[k]=e.target.value;renderMemBody()});
 };
 function memberForm(m){
-  const s=S();m=m||{status:'재적',regDate:today(),baptism:'세례',ministries:[]};
+  const s=S();m=m||{status:'준회원',regDate:today(),baptism:'세례',ministries:[]};
   return `<div class="form">
   <label>이름 *<input type="text" name="name" value="${esc(m.name)}" required></label>
   <label>성별<select name="gender">${opts(['남','여'],m.gender,'-')}</select></label>
@@ -619,7 +619,7 @@ function openMember(id){
   const logs=DB.logs.filter(l=>l.memberId===id&&!l.deleted).sort((a,b)=>b.date.localeCompare(a.date));
   const el=eligibility(m);const r6=sundayRate(m,6);const ab=absence(m);
   const ov=modal(`<div class="head" style="margin:0"><div><h3>${esc(m.name)} <span class="muted" style="font:14px var(--f-body)">${esc(m.title||'')} · ${esc(m.district||'')} · ${esc(m.society||'')}</span></h3>
-    <div class="row">${pill(m.status,STATUS_PILL[m.status])} ${m.status==='재적'?(el.ok?pill('정회원 심사 대상','ok'):pill('심사 전: '+el.why[0],'')):''} ${m.status==='정회원'?(voteRight(m)?pill('선거권 있음','ok'):pill('선거권 1년 미만','')):''}</div></div>
+    <div class="row">${pill(m.status,STATUS_PILL[m.status])} ${m.status==='준회원'?(el.ok?pill('정회원 심사 대상','ok'):pill('심사 전: '+el.why[0],'')):''} ${m.status==='정회원'?(voteRight(m)?pill('선거권 있음','ok'):pill('선거권 1년 미만','')):''}</div></div>
     <div class="row"><button class="btn" data-act="editMember" data-id="${id}">정보 수정</button><button class="btn" data-act="close">닫기</button></div></div>
     <div class="form" style="grid-template-columns:repeat(auto-fit,minmax(150px,1fr))">
       <label>생년월일<span>${fmtY(m.birth)||'-'} ${m.lunar?'(음)':''} ${m.birth?`만 ${ageOf(m.birth)}세`:''}</span></label>
@@ -648,7 +648,7 @@ function quickAdd(){
   ov.querySelector('#qaSave').onclick=()=>{
     const name=ov.querySelector('#qaName').value.trim();if(!name){toast('이름을 입력하세요');return}
     const prev=ov.querySelector('#qaPrev').value.trim();
-    const m={id:uid(),name,phone:ov.querySelector('#qaPhone').value.trim(),district:ov.querySelector('#qaDist').value,baptism:ov.querySelector('#qaBap').value,title:'성도',society:'',ministries:[],regDate:UI.att.date||today(),status:'재적',prevChurch:prev,updatedAt:now(),deleted:false};
+    const m={id:uid(),name,phone:ov.querySelector('#qaPhone').value.trim(),district:ov.querySelector('#qaDist').value,baptism:ov.querySelector('#qaBap').value,title:'성도',society:'',ministries:[],regDate:UI.att.date||today(),status:'준회원',prevChurch:prev,updatedAt:now(),deleted:false};
     DB.members.push(m);addLog(m.id,'등록',prev?`새가족 등록 · 이명 전입 (${prev})`:'새가족 등록',m.regDate);
     ov.remove();toggleAtt(m.id);render();toast(name+' 님 등록·출석 처리');
   };
@@ -656,13 +656,13 @@ function quickAdd(){
 
 /* ============ 정회원 심사 ============ */
 R.member=()=>{
-  const s=S();const pend=activeMembers().filter(m=>m.status==='재적').map(m=>[m,eligibility(m)]).sort((a,b)=>(b[1].ok-a[1].ok)||ko(a[0].name,b[0].name));
+  const s=S();const pend=activeMembers().filter(m=>m.status==='준회원').map(m=>[m,eligibility(m)]).sort((a,b)=>(b[1].ok-a[1].ok)||ko(a[0].name,b[0].name));
   const full=activeMembers().filter(m=>m.status==='정회원');
   const asm=full.filter(m=>{const a=ageOf(m.birth);return a==null||a>=s.assemblyAge});
   return `${demoBanner()}<div class="head"><div><h1>정회원 심사</h1><p>정관 제6조: 등록 후 소정 교육 이수 + ${s.eduMonths}개월, 또는 교육 없이 ${s.memberMonths}개월 이상 정기 출석한 세례교인 → 운영위원회 결정</p></div>
   <div class="row"><button class="btn" data-act="exp" data-r="candidates" data-f="pdf">심사 명단 PDF</button><button class="btn" data-act="exp" data-r="assembly" data-f="xlsx">공동의회 명부 Excel</button><button class="btn" data-act="exp" data-r="assembly" data-f="pdf">공동의회 명부 PDF</button></div></div>
   <p class="muted">정기 출석 기준: 출석 기록이 있는 주일 중 <b>${s.regularRate}%</b> 이상 (설정에서 변경). 공동의회 회원은 만 ${s.assemblyAge}세 이상 정회원, 선거권은 등록 후 ${s.voteMonths}개월 정기 출석 (정관 제7조·제12조).</p>
-  <div class="panel" style="margin-bottom:16px"><div class="row" style="justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">등록교인 (정회원 전) ${pend.length}명</h2><button class="btn pri" data-act="approve">선택한 교인 운영위 승인</button></div>
+  <div class="panel" style="margin-bottom:16px"><div class="row" style="justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">준회원 ${pend.length}명</h2><button class="btn pri" data-act="approve">선택한 교인 운영위 승인</button></div>
   <div class="tbl-wrap"><table><thead><tr><th><input type="checkbox" id="chkAll" aria-label="대상 전체 선택"></th><th>이름</th><th>등록일</th><th class="num">경과</th><th>세례</th><th>교육이수</th><th class="num">주일출석</th><th>판정</th></tr></thead><tbody>
   ${pend.map(([m,e])=>`<tr><td><input type="checkbox" class="chkM" value="${m.id}" ${e.ok?'':'disabled'} aria-label="${esc(m.name)} 선택"></td><td><a href="#" data-act="openMember" data-id="${m.id}">${esc(m.name)}</a></td><td>${fmtY(m.regDate)}</td><td class="num">${e.months}개월</td><td>${esc(m.baptism)}</td><td>${m.eduDate?fmtY(m.eduDate):'-'}</td><td class="num">${e.rate.att}/${e.rate.total}주 ${Math.round(e.rate.rate*100)}%</td><td>${e.ok?pill('자격 충족 · '+e.path,'ok'):`<span class="muted">${esc(e.why.join(' · '))}</span>`}</td></tr>`).join('')||'<tr><td colspan="8" class="empty">등록교인이 없습니다</td></tr>'}
   </tbody></table></div></div>
@@ -702,7 +702,7 @@ R.abs=()=>{
     return head+`<div class="tbl-wrap"><table><thead><tr><th>이름</th><th>상태</th><th>구역</th><th>마지막 출석</th><th>사유 / 최근 기록</th><th></th></tr></thead><tbody>
     ${rows.map(m=>{const a=absence(m);const lg=DB.logs.filter(l=>l.memberId===m.id).sort((x,y)=>y.date.localeCompare(x.date))[0];
       return `<tr><td><a href="#" data-act="openMember" data-id="${m.id}">${esc(m.name)}</a></td><td>${pill(m.status,STATUS_PILL[m.status])}</td><td>${esc(m.district)}</td><td>${a.last?fmtY(a.last):'없음'}</td><td class="muted">${lg?esc(lg.type+' · '+lg.text):''}</td>
-      <td><div class="row">${m.status==='별명부'?`<button class="btn sm" data-act="setStatus" data-id="${m.id}" data-s="정지">회원권 정지</button>`:''}<button class="btn sm" data-act="setStatus" data-id="${m.id}" data-s="복귀">재적 복귀</button></div></td></tr>`}).join('')||'<tr><td colspan="6" class="empty">별명부·정지 교인이 없습니다</td></tr>'}</tbody></table></div>`;
+      <td><div class="row">${m.status==='별명부'?`<button class="btn sm" data-act="setStatus" data-id="${m.id}" data-s="정지">회원권 정지</button>`:''}<button class="btn sm" data-act="setStatus" data-id="${m.id}" data-s="복귀">복귀</button></div></td></tr>`}).join('')||'<tr><td colspan="6" class="empty">별명부·정지 교인이 없습니다</td></tr>'}</tbody></table></div>`;
   }
   const tr=DB.logs.filter(l=>l.type==='이명'||(l.type==='등록'&&/이명/.test(l.text))).sort((a,b)=>b.date.localeCompare(a.date));
   return head+`<div class="grid2"><div class="panel"><h2>이명 전출 처리</h2>
@@ -721,7 +721,7 @@ function transferOut(){
 }
 async function setStatus(id,to){
   const m=memberById(id);
-  if(to==='복귀'){to=m.approvedDate?'정회원':'재적'}
+  if(to==='복귀'){to=m.approvedDate?'정회원':'준회원'}
   if(!await ask(`${esc(m.name)} 님의 상태를 <b>${to}</b>(으)로 바꿉니다.`,'변경'))return;
   const prev=m.status;m.status=to;m.updatedAt=now();addLog(id,'상태변경',`${prev} → ${to}${to==='별명부'?' (정관 제9조 1항)':''}`);commit();render();
 }
@@ -772,7 +772,7 @@ function showOffPreview(ov,parsed){
 }
 function applyOff(ov,parsed){
   const byName=new Map();activeMembers().concat(members()).forEach(m=>{if(!byName.has(m.name))byName.set(m.name,m)});
-  ov.querySelectorAll('.ioNew:checked').forEach(c=>{const m={id:uid(),name:c.value,title:'성도',status:'재적',regDate:'',baptism:'세례',ministries:[],updatedAt:now(),deleted:false,memo:'헌금집계에서 등록'};DB.members.push(m);byName.set(m.name,m)});
+  ov.querySelectorAll('.ioNew:checked').forEach(c=>{const m={id:uid(),name:c.value,title:'성도',status:'준회원',regDate:'',baptism:'세례',ministries:[],updatedAt:now(),deleted:false,memo:'헌금집계에서 등록'};DB.members.push(m);byName.set(m.name,m)});
   const grouped={};parsed.forEach(p=>{const m=byName.get(p.name);if(!m)return;(grouped[p.date]=grouped[p.date]||{})[m.id]=p.cats});
   Object.keys(grouped).forEach(d=>DB.offerings[d]={t:now(),recs:grouped[d]});
   commit();ov.remove();toast(Object.keys(grouped).length+'주 헌금생활 반영');render();
@@ -846,7 +846,7 @@ function buildReport(kind,arg){
       rows:list.map((m,i)=>[i+1,m.name,m.title||'',m.district||'',fmtY(m.regDate),fmtY(m.approvedDate),voteRight(m)?'○':'',''])  ,sheet:'공동의회명부'};
   }
   if(kind==='candidates'){
-    const list=activeMembers().filter(m=>m.status==='재적').map(m=>[m,eligibility(m)]).filter(x=>x[1].ok).sort((a,b)=>ko(a[0].name,b[0].name));
+    const list=activeMembers().filter(m=>m.status==='준회원').map(m=>[m,eligibility(m)]).filter(x=>x[1].ok).sort((a,b)=>ko(a[0].name,b[0].name));
     return {title:`${church} 정회원 심사 대상자 명단`,sub:`운영위원회 심의용 · ${fmtY(T)}`,cols:['번호','이름','등록일','경과','세례','교육이수','주일출석','근거','결의'],
       rows:list.map(([m,e],i)=>[i+1,m.name,fmtY(m.regDate),e.months+'개월',m.baptism,fmtY(m.eduDate)||'-',`${e.rate.att}/${e.rate.total}주 (${Math.round(e.rate.rate*100)}%)`,e.path==='교육이수'?'제6조 1항':'제6조 2항','']),sheet:'정회원심사'};
   }
@@ -943,7 +943,7 @@ after.set=()=>{
 };
 function normalize(d){
   const db=Object.assign(blankDB(),d||{});db.settings=Object.assign(DEFAULT_SETTINGS(),db.settings||{});
-  db.members=(db.members||[]).map(m=>Object.assign({ministries:[],deleted:false},m,{status:m.status||'재적',ministries:Array.isArray(m.ministries)?m.ministries:String(m.ministries||'').split(',').map(x=>x.trim()).filter(Boolean)}));db.attendance=db.attendance||{};db.offerings=db.offerings||{};db.logs=db.logs||[];db.local=db.local||{};return db;
+  db.members=(db.members||[]).map(m=>Object.assign({ministries:[],deleted:false},m,{status:(!m.status||m.status==='재적')?'준회원':m.status,ministries:Array.isArray(m.ministries)?m.ministries:String(m.ministries||'').split(',').map(x=>x.trim()).filter(Boolean)}));db.attendance=db.attendance||{};db.offerings=db.offerings||{};db.logs=db.logs||[];db.local=db.local||{};return db;
 }
 function stripLocal(db){const o=Object.assign({},db);delete o.local;return o}
 async function sync(){
