@@ -8,5 +8,12 @@ contextBridge.exposeInMainWorld('churchAPI', {
   http: (url, opt) => ipcRenderer.invoke('http', url, opt),
   appInfo: () => ipcRenderer.invoke('app:info'),
   checkUpdate: () => ipcRenderer.invoke('app:checkUpdate'),
-  onUpdate: (fn) => ipcRenderer.on('update', (e, s) => fn(s))
+  onUpdate: (fn) => ipcRenderer.on('update', (e, s) => fn(s)),
+  lanStart: () => ipcRenderer.invoke('lan:start'),
+  lanStop: () => ipcRenderer.invoke('lan:stop'),
+  onLanIncoming: (fn) => ipcRenderer.on('lan:incoming', (e, { id, data }) => {
+    let out = null;
+    try { out = fn(data); } catch (err) { out = null; }
+    ipcRenderer.send('lan:reply', id, out);
+  })
 });
