@@ -1,0 +1,30 @@
+# v로 시작하는 태그(예: v0.2.1)를 올리거나 Actions에서 Run workflow를 누르면 Windows 설치 파일을 만들어 Releases에 게시합니다.
+# 설치된 프로그램은 시작할 때 이 Releases를 확인해 자동으로 업데이트합니다.
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - name: SheetJS (오프라인 엑셀용) 준비
+        shell: bash
+        run: |
+          mkdir -p renderer/vendor
+          [ -f renderer/vendor/xlsx.full.min.js ] || curl -fsSL -o renderer/vendor/xlsx.full.min.js https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js
+      - run: npm run release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
