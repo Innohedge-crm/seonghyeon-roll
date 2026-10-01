@@ -9,6 +9,7 @@
  *    태블릿은 같은 URL을 브라우저로 열고 KEY를 한 번 입력하면 탭 출석체크가 구글시트에 바로 저장됩니다.
  *
  * 시트 구성: 교인명부 / 출석 / 헌금생활 / 기록 / _설정  (처음 동기화할 때 자동 생성)
+ * 교인명부 탭에는 직접 입력·붙여넣기 가능 (ID·수정시각·삭제 칸은 비워 두면 자동 기록, 상태가 비면 '재적')
  * 헌금생활은 참여 항목만 저장하며 금액은 저장하지 않습니다.
  */
 const KEY = '여기에-비밀번호를-입력';
@@ -63,6 +64,83 @@ function pushMerge_(incoming) {
   } finally { lock.releaseLock(); }
 }
 
+/* ---------- 교인명부: 시트에서 직접 입력한 줄도 받아들임 ---------- */
+// 열 순서가 바뀌어도 머리글 이름으로 찾음. ID가 없으면 만들어 시트에 바로 기록.
+function memberCols_(sh) {
+  const head = sh.getRange(1, 1, 1, Math.max(1, sh.getLastColumn())).getDisplayValues()[0].map(h => String(h).trim());
+  const col = {};
+  MEMBER_FIELDS.forEach(([k, label]) => { const i = head.indexOf(label); if (i >= 0) col[k] = i; });
+  return { head, col };
+}
+function normDate_(v) {
+  v = String(v || '').trim();
+  if (!v) return '';
+  let m = v.match(/^(\d{4})\s*[.\-\/년]\s*(\d{1,2})\s*[.\-\/월]\s*(\d{1,2})/);
+  if (!m) m = v.match(/^(\d{4})(\d{2})(\d{2})$/);
+  if (m) return m[1] + '-' + ('0' + m[2]).slice(-2) + '-' + ('0' + m[3]).slice(-2);
+  return v;
+}
+function normPhone_(v) {
+  let d = String(v || '').replace(/[^\d]/g, '');
+  if (!d) return String(v || '').trim();
+  if (d.length === 10 && d.charAt(0) === '1') d = '0' + d;
+  if (d.length === 11 && d.indexOf('010') === 0) return d.slice(0, 3) + '-' + d.slice(3, 7) + '-' + d.slice(7);
+  return String(v).trim();
+}
+function readMembers_() {
+  const sh = sheet_('교인명부', MEMBER_FIELDS.map(f => f[1]));
+  const n = sh.getLastRow();
+  if (n < 2) return [];
+  const { col } = memberCols_(sh);
+  if (col.name == null) return [];
+  const vals = sh.getRange(2, 1, n - 1, sh.getLastColumn()).getDisplayValues();
+  const out = [];
+  const now = Date.now();
+  vals.forEach((r, i) => {
+    const get = k => (col[k] == null ? '' : String(r[col[k]] || '').trim());
+    const name = get('name');
+    if (!name) return;
+    let id = get('id'), upd = Number(get('updatedAt')) || 0;
+    if (!id) {
+      id = 's' + Utilities.getUuid().replace(/-/g, '').slice(0, 12);
+      upd = now;
+      if (col.id != null) sh.getRange(i + 2, col.id + 1).setNumberFormat('@').setValue(id);
+      if (col.updatedAt != null) sh.getRange(i + 2, col.updatedAt + 1).setNumberFormat('@').setValue(String(upd));
+    }
+    const m = {};
+    MEMBER_FIELDS.forEach(([k]) => { m[k] = get(k); });
+    m.id = id;
+    m.name = name.replace(/\s+/g, '');
+    m.updatedAt = upd;
+    ['birth', 'regDate', 'baptismDate', 'eduDate', 'approvedDate'].forEach(k => { m[k] = normDate_(m[k]); });
+    m.phone = normPhone_(m.phone);
+    m.lunar = /음|TRUE|Y/i.test(m.lunar);
+    m.deleted = /^(Y|TRUE|삭제)$/i.test(m.deleted);
+    m.ministries = m.ministries ? m.ministries.split(/[,、·\/]/).map(s => s.trim()).filter(String) : [];
+    if (!m.status) m.status = '재적';
+    if (m.gender) m.gender = /여|F/i.test(m.gender) ? '여' : /남|M/i.test(m.gender) ? '남' : m.gender;
+    out.push(m);
+  });
+  return out;
+}
+
+/* 시트에서 교인명부를 직접 고치면 수정시각을 기록 → 다음 동기화 때 시트 내용이 우선 */
+function onEdit(e) {
+  try {
+    const sh = e.range.getSheet();
+    if (sh.getName() !== '교인명부' || e.range.getLastRow() < 2) return;
+    const { col } = memberCols_(sh);
+    if (col.updatedAt == null) return;
+    const top = Math.max(2, e.range.getRow()), bottom = e.range.getLastRow();
+    const editedCols = [];
+    for (let c = e.range.getColumn(); c <= e.range.getLastColumn(); c++) editedCols.push(c - 1);
+    if (editedCols.every(c => c === col.updatedAt || c === col.id)) return;
+    const stamp = String(Date.now());
+    const rng = sh.getRange(top, col.updatedAt + 1, bottom - top + 1, 1);
+    rng.setNumberFormat('@').setValues(Array(bottom - top + 1).fill([stamp]));
+  } catch (err) { /* 무시 */ }
+}
+
 /* ---------- 시트 읽기/쓰기 ---------- */
 function sheet_(name, header) {
   const ss = SpreadsheetApp.getActive();
@@ -88,17 +166,7 @@ function write_(sh, header, rows) {
 
 function readAll_() {
   const out = { version: 1, settings: {}, members: [], attendance: {}, offerings: {}, logs: [] };
-  const mh = MEMBER_FIELDS.map(f => f[1]);
-  rows_(sheet_('교인명부', mh)).forEach(r => {
-    if (!r[0]) return;
-    const m = {};
-    MEMBER_FIELDS.forEach((f, i) => { m[f[0]] = r[i] || ''; });
-    m.lunar = m.lunar === '음력' || m.lunar === 'TRUE';
-    m.deleted = m.deleted === 'Y' || m.deleted === 'TRUE';
-    m.ministries = m.ministries ? m.ministries.split(',').map(s => s.trim()).filter(String) : [];
-    m.updatedAt = Number(m.updatedAt) || 0;
-    out.members.push(m);
-  });
+  out.members = readMembers_();
   rows_(sheet_('출석', ['날짜', '예배키', '예배', '인원', '출석자ID', '출석자', '수정시각'])).forEach(r => {
     if (!r[0]) return;
     out.attendance[r[0] + '|' + r[1]] = { ids: r[4] ? r[4].split(',').filter(String) : [], t: Number(r[6]) || 0 };
