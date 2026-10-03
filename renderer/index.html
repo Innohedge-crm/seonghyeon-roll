@@ -150,6 +150,7 @@ body.tablet .card .nm{font-size:21px}
   .cards{grid-template-columns:repeat(auto-fill,minmax(108px,1fr))}
 }
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+nav.side button.navmode{margin-top:8px;border:1px dashed var(--line);font-weight:600}
 body.tablet-client [data-act="exp"],body.tablet-client [data-act="clearDemo"],body.tablet-client [data-act="delMember"]{display:none}
 </style>
 
@@ -277,7 +278,9 @@ const Host={
 /* ============ 같은 와이파이 태블릿 (데스크탑에 QR로 연결) ============ */
 const LAN_T=(new URLSearchParams(location.search)).get('t')||'';
 const TABLET_VIEWS=new Set(['dash','att','mem']);
-const isTablet=()=>Host.kind==='lan'||Host.kind==='gas';
+let ADMIN=false;
+const isTablet=()=>Host.kind==='lan'||(Host.kind==='gas'&&!ADMIN);
+function toggleAdmin(){ADMIN=!ADMIN;document.body.classList.toggle('tablet-client',isTablet());if(!ADMIN&&!TABLET_VIEWS.has(UI.view))UI.view='dash';render();window.scrollTo(0,0);toast(ADMIN?'관리 화면: 모든 메뉴가 보입니다':'태블릿 모드로 돌아왔습니다')}
 let lanRev=0,lanTimer=null,lanBusy=false,lanOnline=true;
 async function lanFetch(path,opt){const r=await fetch(path+(path.includes('?')?'&':'?')+'t='+encodeURIComponent(LAN_T),Object.assign({cache:'no-store'},opt||{}));if(r.status===401)throw new Error('연결 코드가 맞지 않습니다. 데스크탑의 QR을 다시 찍어 주세요');if(!r.ok)throw new Error('데스크탑 응답 '+r.status);return r.json()}
 async function lanLoad(){const j=await lanFetch('/api/data');lanRev=j.rev||0;return j.data}
@@ -394,6 +397,7 @@ function commit(){
   IDX=null;
   clearTimeout(saveTimer);saveTimer=setTimeout(()=>Host.save(DB),250);
   updateNavCounts();
+  syncSoon(5000);
 }
 function touchSettings(){S().updatedAt=now();commit()}
 
@@ -475,7 +479,9 @@ function renderNav(){
   $('#nav').innerHTML=`<div class="brand"><b>${esc(S().churchName)}</b><small>출석부 · 교인관리</small></div>`+
     VIEWS.filter(([k])=>!isTablet()||TABLET_VIEWS.has(k)).map(([k,l])=>k==='--'?`<div class="grp">${l}</div>`:`<button data-act="go" data-v="${k}" ${UI.view===k?'aria-current="page"':''}><span>${l}</span>${counts[k]?`<span class="cnt">${counts[k]}</span>`:''}</button>`).join('')+
     (Host.kind==='electron'?`<button data-act="lanOpen"><span>태블릿 연결 (QR)</span></button>`:'')+
-    (Host.kind==='gas'?`<button data-act="reKey"><span>비밀번호 다시 입력</span></button>`:'')+
+    (Host.kind==='gas'?`<button data-act="toggleAdmin" class="navmode"><span>${ADMIN?'← 태블릿 모드':'관리 화면 ▸'}</span></button>`:'')+
+    (Host.kind==='gas'&&ADMIN?`<button data-act="reKey"><span>비밀번호 다시 입력</span></button>`:'')+
+    (Host.kind==='electron'&&(DB.local||{}).sheetUrl?`<button data-act="sync"><span>지금 동기화</span></button>`:'')+
     `<div class="foot" id="syncState">${syncLabel()}${verLabel()}</div>`;
 }
 function navCounts(){
@@ -488,6 +494,8 @@ function syncLabel(){
   const L=DB.local||{};
   if(Host.kind==='gas')return '구글시트에 자동 저장';
   if(Host.kind==='lan')return lanOnline?'데스크탑과 연결됨 · 자동 저장':'데스크탑 연결 끊김 — 와이파이 확인';
+  if(SYNCERR)return `<span style="color:#b3261e">시트 동기화 실패 — ${esc(SYNCERR)}</span>`;
+  if(syncBusy)return '구글시트와 동기화 중…';
   return L.lastSync?`시트 동기화 ${new Date(L.lastSync).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'})}`:(L.sheetUrl?'시트 동기화 전':'이 기기에만 저장');
 }
 function verLabel(){
@@ -986,7 +994,7 @@ after.set=()=>{
   document.querySelectorAll('[data-num]').forEach(el=>el.onchange=()=>{s[el.dataset.num]=+el.value||0;touchSettings();toast('기준을 바꿨습니다')});
   document.querySelectorAll('[data-text]').forEach(el=>el.onchange=()=>{s[el.dataset.text]=el.value.trim();touchSettings()});
   document.querySelectorAll('[data-svc]').forEach(el=>el.onchange=()=>{s.services[+el.dataset.svc].name=el.value.trim();touchSettings()});
-  $('#gsSave').onclick=()=>{DB.local=DB.local||{};DB.local.sheetUrl=$('#gsUrl').value.trim();DB.local.key=$('#gsKey').value;commit();toast('연동 주소를 저장했습니다')};
+  $('#gsSave').onclick=()=>{DB.local=DB.local||{};DB.local.sheetUrl=$('#gsUrl').value.trim();DB.local.key=$('#gsKey').value;SYNCERR='';commit();toast('연동 주소를 저장했습니다')};
   $('#restore').onchange=async e=>{const f=e.target.files[0];if(!f)return;try{const d=JSON.parse(await f.text());if(!d.members)throw 0;if(!await ask('현재 데이터를 백업 파일 내용으로 바꿉니다.','복원'))return;const local=DB.local;DB=normalize(d);DB.local=local;commit();render();toast('복원했습니다')}catch(x){toast('백업 파일 형식이 아닙니다')}};
 };
 function normalize(d){
@@ -995,16 +1003,33 @@ function normalize(d){
   db.members=(db.members||[]).map(m=>Object.assign({ministries:[],deleted:false},m,{birth:normBirth(m.birth),status:(!m.status||m.status==='재적')?'준회원':m.status,ministries:Array.isArray(m.ministries)?m.ministries:String(m.ministries||'').split(',').map(x=>x.trim()).filter(Boolean)}));db.attendance=db.attendance||{};db.offerings=db.offerings||{};db.logs=db.logs||[];db.local=db.local||{};return db;
 }
 function stripLocal(db){const o=Object.assign({},db);delete o.local;return o}
-async function sync(){
+/* 데스크탑 ↔ 구글시트 자동 동기화: 수정 후 5초, 켤 때, 켜져 있는 동안 3분마다 */
+let syncTimer=null,syncBusy=false,syncAgain=false,SYNCERR='';
+function dbSig(d){return JSON.stringify([(d.members||[]).map(m=>m.id+':'+(m.updatedAt||0)),Object.keys(d.attendance||{}).map(k=>k+':'+((d.attendance[k]||{}).t||0)),(d.logs||[]).length,Object.keys(d.offerings||{}).length,(d.settings||{}).updatedAt||0])}
+function canAutoSync(){const L=DB&&DB.local||{};return Host.kind==='electron'&&!!L.sheetUrl&&!!L.key}
+function syncSoon(ms){if(!canAutoSync())return;clearTimeout(syncTimer);syncTimer=setTimeout(()=>sync({quiet:true}),ms==null?5000:ms)}
+async function sync(opt){
+  const quiet=!!(opt&&opt.quiet);
   const L=DB.local||{};
   if(Host.kind==='gas'){await gasPush(true);return}
-  if(!L.sheetUrl){toast('웹앱 주소를 먼저 저장하세요');return}
+  if(!L.sheetUrl){if(!quiet)toast('웹앱 주소를 먼저 저장하세요');return}
+  if(syncBusy){syncAgain=true;return}
+  syncBusy=true;clearTimeout(syncTimer);renderNav();
   try{
-    toast('동기화 중…');
-    const res=JSON.parse(await Host.http(L.sheetUrl,{method:'POST',body:JSON.stringify({action:'push',key:L.key||'',data:stripLocal(DB)})}));
+    if(!quiet)toast('동기화 중…');
+    const sent=JSON.stringify(stripLocal(DB)),sig0=dbSig(DB);
+    const res=JSON.parse(await Host.http(L.sheetUrl,{method:'POST',body:JSON.stringify({action:'push',key:L.key||'',data:JSON.parse(sent)})}));
     if(!res.ok)throw new Error(res.error==='key'?'비밀번호가 다릅니다':res.error);
-    const before=members().length;const local=DB.local;DB=normalize(mergeData(DB,res.data));DB.local=local;DB.local.lastSync=now();commit();render();const added=members().length-before;toast(`구글시트와 동기화했습니다 · 교인 ${members().length}명${added>0?` (새로 ${added}명)`:''}`);
-  }catch(e){toast('동기화 실패: '+(e.message||e))}
+    const before=members().length;const local=DB.local;DB=normalize(mergeData(DB,res.data));DB.local=local;DB.local.lastSync=now();IDX=null;
+    clearTimeout(saveTimer);await Host.save(DB);SYNCERR='';
+    const changed=dbSig(DB)!==sig0;
+    const a=document.activeElement;const busyUI=document.querySelector('.ov')||(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName));
+    if(!quiet||(changed&&!busyUI))render();else renderNav();
+    const added=members().length-before;
+    if(!quiet)toast(`구글시트와 동기화했습니다 · 교인 ${members().length}명${added>0?` (새로 ${added}명)`:''}`);
+  }catch(e){SYNCERR=(e.message||String(e)).slice(0,60);if(!quiet)toast('동기화 실패: '+(e.message||e))}
+  syncBusy=false;renderNav();
+  if(syncAgain){syncAgain=false;syncSoon(1000)}
 }
 /* 구글 웹앱(태블릿)에서 실행될 때 */
 let gasTimer=null;
@@ -1044,7 +1069,7 @@ async function lanOpen(){
 function lanIncoming(data){
   const before=JSON.stringify(stripLocal(DB)).length;
   const local=DB.local;DB=normalize(mergeData(DB,data));DB.local=local;IDX=null;
-  churchAPI.saveData(DB);
+  churchAPI.saveData(DB);syncSoon(5000);
   const a=document.activeElement;if(!document.querySelector('.ov')&&!(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)))render();else renderNav();
   return stripLocal(DB);
 }
@@ -1075,6 +1100,7 @@ const ACT={
   exp:el=>exportReport(el.dataset.r,el.dataset.f),
   sync:()=>sync(),
   lanOpen:()=>lanOpen(),
+  toggleAdmin:()=>toggleAdmin(),
   reKey:()=>reKey(),
   lanStop:async el=>{await churchAPI.lanStop();closeModal(el);toast('태블릿 연결을 껐습니다')},
   checkUpdate:()=>{if(window.churchAPI&&churchAPI.checkUpdate)churchAPI.checkUpdate()},
@@ -1109,5 +1135,6 @@ document.addEventListener('keydown',e=>{
   }
   if(!d&&Host.kind!=='lan')Host.save(DB);
   render();
+  if(Host.kind==='electron'){syncSoon(1500);setInterval(()=>{if(!syncBusy)syncSoon(0)},3*60*1000);}
 })();
 </script>
