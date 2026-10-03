@@ -1,7 +1,7 @@
 {
   "name": "seonghyeon-roll",
   "productName": "성현교회 출석부",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "성현교회 출석부 및 교인관리",
   "main": "main.js",
   "author": "성현교회 재정부",
