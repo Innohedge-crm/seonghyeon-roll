@@ -13,6 +13,8 @@
  * 헌금생활은 참여 항목만 저장하며 금액은 저장하지 않습니다.
  */
 const KEY = '여기에-비밀번호를-입력';
+// 웹앱 '관리 화면' 비밀번호 (태블릿 모드 → 전체 메뉴). 실제 값은 Apps Script 편집기에서만 바꿉니다.
+const ADMIN_PW = '여기에-관리자-비밀번호를-입력';
 
 const MEMBER_FIELDS = [
   ['id','ID'],['name','이름'],['gender','성별'],['birth','생년월일'],['lunar','음력'],['phone','연락처'],['address','주소'],
@@ -25,10 +27,15 @@ const MEMBER_FIELDS = [
 function doGet(e) {
   const p = (e && e.parameter) || {};
   if (!p.action) {
-    return HtmlService.createHtmlOutputFromFile('index')
+    const out = HtmlService.createHtmlOutputFromFile('index')
       .setTitle('성현교회 출석부')
-      .addMetaTag('viewport', 'width=device-width, initial-scale=1')
+      .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover')
       .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.ALLOWALL);
+    // 홈 화면에 추가했을 때 주소창 없이 앱처럼 열리도록 (허용되지 않는 태그는 건너뜀)
+    [['apple-mobile-web-app-capable', 'yes'], ['mobile-web-app-capable', 'yes'],
+     ['apple-mobile-web-app-title', '성현교회 출석부'], ['apple-mobile-web-app-status-bar-style', 'black-translucent']]
+      .forEach(t => { try { out.addMetaTag(t[0], t[1]); } catch (err) {} });
+    return out;
   }
   if (p.key !== KEY) return json_({ ok: false, error: 'key' });
   try {
@@ -50,6 +57,11 @@ function doPost(e) {
 /* 태블릿 웹앱(google.script.run)용 */
 function apiPull(key) { if (key !== KEY) return JSON.stringify({ ok: false, error: '비밀번호가 다릅니다' }); return JSON.stringify({ ok: true, data: readAll_() }); }
 function apiPush(key, s) { if (key !== KEY) return JSON.stringify({ ok: false, error: '비밀번호가 다릅니다' }); return JSON.stringify({ ok: true, data: pushMerge_(JSON.parse(s)) }); }
+
+function apiAdmin(key, pw) {
+  if (key !== KEY) return JSON.stringify({ ok: false, error: '비밀번호가 다릅니다' });
+  return JSON.stringify({ ok: String(pw || '') === ADMIN_PW && ADMIN_PW.indexOf('여기에') !== 0 });
+}
 
 function json_(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
 
