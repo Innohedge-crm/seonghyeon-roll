@@ -512,7 +512,7 @@ function verLabel(){
   const st=u.state==='downloading'?` · 새 버전 받는 중${u.percent!=null?' '+u.percent+'%':''}`:u.state==='ready'?` · v${esc(u.version)} 설치 대기 (종료 시 설치)`:'';
   return `<br>v${esc(APPINFO.version)}${st}`;
 }
-function go(v){if(isTablet()&&!TABLET_VIEWS.has(v))return;UI.view=v;render();window.scrollTo(0,0)}
+function go(v){if(isTablet()&&!TABLET_VIEWS.has(v))return;UI.view=v;render();window.scrollTo(0,0);if(Host.kind==='gas')gasRefresh(false)}
 function render(){renderNav();$('#main').innerHTML=(R[UI.view]||R.dash)();after[UI.view]&&after[UI.view]()}
 const R={},after={};
 const demoBanner=()=>S().demo?`<div class="banner"><span>지금 보이는 교인과 출석은 <b>예시 데이터</b>입니다. 실제 명단은 교인 등록이나 헌금집계표 가져오기로 시작하세요.</span><button class="btn sm" data-act="clearDemo">예시 지우고 시작</button></div>`:'';
@@ -1071,6 +1071,17 @@ function gasFullscreenSetup(){
   ['fullscreenchange','webkitfullscreenchange'].forEach(ev=>document.addEventListener(ev,()=>renderNav()));
   if(matchMedia('(pointer:coarse)').matches){const first=()=>{document.removeEventListener('click',first,true);if(!fsEl())enterFS()};document.addEventListener('click',first,true)}
 }
+/* 웹앱: 다른 기기에서 바뀐 내용 가져오기 — 화면으로 돌아올 때(10초 간격) · 메뉴 누를 때(3분 간격) */
+let gasLastPull=0,gasPulling=false;
+async function gasRefresh(back){
+  const gap=back?10*1000:3*60*1000;
+  if(gasPulling||!(DB.local||{}).key||Date.now()-gasLastPull<gap)return;
+  gasPulling=true;
+  try{const sig0=dbSig(DB);const remote=await gasPull();const local=DB.local;DB=normalize(mergeData(DB,remote));DB.local=local;ls.set(LSKEY,JSON.stringify(DB));IDX=null;gasLastPull=Date.now();
+    if(dbSig(DB)!==sig0){const a=document.activeElement;if(!document.querySelector('.ov')&&!(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)))render();else renderNav();}}
+  catch(e){}
+  gasPulling=false;
+}
 function gasPull(){return new Promise((res,rej)=>{google.script.run.withSuccessHandler(t=>{const r=JSON.parse(t);r.ok?res(r.data):rej(new Error(r.error))}).withFailureHandler(rej).apiPull((DB.local||{}).key||'')})}
 
 async function lanOpen(){
@@ -1148,10 +1159,12 @@ document.addEventListener('keydown',e=>{
   DB=d?normalize(d):((Host.kind==='gas'||Host.kind==='lan')?blankDB():demoDB());
   if(Host.kind==='gas'){
     gasFullscreenSetup();
+    document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible')gasRefresh(true)});
+    window.addEventListener('pageshow',e=>{if(e.persisted)gasRefresh(true)});
     let msg='';
     for(;;){
       if(!DB.local.key){render();DB.local.key=await askKey(msg);if(!DB.local.key)continue;}
-      try{const remote=await gasPull();const local=DB.local;if((remote.members||[]).length)DB=normalize(mergeData(DB,remote));DB.local=local;ls.set(LSKEY,JSON.stringify(DB));IDX=null;break}
+      try{const remote=await gasPull();const local=DB.local;if((remote.members||[]).length)DB=normalize(mergeData(DB,remote));DB.local=local;ls.set(LSKEY,JSON.stringify(DB));IDX=null;gasLastPull=Date.now();break}
       catch(e){const m=e.message||String(e);if(/비밀번호/.test(m)){DB.local.key='';ls.set(LSKEY,JSON.stringify(DB));msg='비밀번호가 맞지 않습니다. 다시 입력하세요.';continue}toast('구글시트를 읽지 못했습니다: '+m);break}
     }
   }
