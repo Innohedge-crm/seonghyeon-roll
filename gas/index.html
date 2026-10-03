@@ -475,6 +475,7 @@ function renderNav(){
   $('#nav').innerHTML=`<div class="brand"><b>${esc(S().churchName)}</b><small>출석부 · 교인관리</small></div>`+
     VIEWS.filter(([k])=>!isTablet()||TABLET_VIEWS.has(k)).map(([k,l])=>k==='--'?`<div class="grp">${l}</div>`:`<button data-act="go" data-v="${k}" ${UI.view===k?'aria-current="page"':''}><span>${l}</span>${counts[k]?`<span class="cnt">${counts[k]}</span>`:''}</button>`).join('')+
     (Host.kind==='electron'?`<button data-act="lanOpen"><span>태블릿 연결 (QR)</span></button>`:'')+
+    (Host.kind==='gas'?`<button data-act="reKey"><span>비밀번호 다시 입력</span></button>`:'')+
     `<div class="foot" id="syncState">${syncLabel()}${verLabel()}</div>`;
 }
 function navCounts(){
@@ -1013,6 +1014,18 @@ function gasPush(loud){return new Promise(res=>{
   google.script.run.withSuccessHandler(txt=>{const r=JSON.parse(txt);if(r.ok){const local=DB.local;DB=normalize(mergeData(DB,r.data));DB.local=local;ls.set(LSKEY,JSON.stringify(DB));IDX=null;if(loud){render();toast('구글시트에 저장했습니다')}}else toast('저장 실패: '+r.error);res()})
    .withFailureHandler(e=>{toast('구글시트 저장 실패: '+e.message);res()}).apiPush(L.key||'',JSON.stringify(stripLocal(DB)));
 })}
+function askKey(msg){return new Promise(r=>{
+  const ov=modal(`<h3>연동 비밀번호</h3><p class="muted">관리자에게 받은 비밀번호를 입력하세요. 이 기기에 기억됩니다.</p>${msg?`<p style="color:var(--bad,#b3261e)"><b>${esc(msg)}</b></p>`:''}<div class="form"><label class="full">비밀번호<input type="password" id="gk" autocomplete="off"></label></div><div class="mfoot"><button class="btn pri" id="gkOk">확인</button></div>`);
+  const inp=ov.querySelector('#gk');setTimeout(()=>inp.focus(),50);
+  const done=()=>{const v=inp.value.trim();if(!v){inp.focus();return}ov.remove();r(v)};
+  ov.querySelector('#gkOk').onclick=done;inp.onkeydown=e=>{if(e.key==='Enter')done()};
+  ov.addEventListener('click',e=>{if(e.target===ov)r(null)});
+})}
+async function reKey(msg){
+  const k=await askKey(msg||'');if(!k)return;DB.local=DB.local||{};const old=DB.local.key;DB.local.key=k;
+  try{const remote=await gasPull();const local=DB.local;DB=normalize(mergeData(DB,remote));DB.local=local;ls.set(LSKEY,JSON.stringify(DB));IDX=null;render();toast('구글시트에서 불러왔습니다')}
+  catch(e){const m=e.message||String(e);if(/비밀번호/.test(m)){DB.local.key=old;return reKey('비밀번호가 맞지 않습니다. 다시 입력하세요.')}toast('구글시트를 읽지 못했습니다: '+m)}
+}
 function gasPull(){return new Promise((res,rej)=>{google.script.run.withSuccessHandler(t=>{const r=JSON.parse(t);r.ok?res(r.data):rej(new Error(r.error))}).withFailureHandler(rej).apiPull((DB.local||{}).key||'')})}
 
 async function lanOpen(){
@@ -1062,6 +1075,7 @@ const ACT={
   exp:el=>exportReport(el.dataset.r,el.dataset.f),
   sync:()=>sync(),
   lanOpen:()=>lanOpen(),
+  reKey:()=>reKey(),
   lanStop:async el=>{await churchAPI.lanStop();closeModal(el);toast('태블릿 연결을 껐습니다')},
   checkUpdate:()=>{if(window.churchAPI&&churchAPI.checkUpdate)churchAPI.checkUpdate()},
   backup:()=>Host.saveFile(`${S().churchName}_출석부_백업_${today().replace(/-/g,'')}.json`,JSON.stringify(stripLocal(DB),null,1)),
@@ -1086,12 +1100,12 @@ document.addEventListener('keydown',e=>{
   if(Host.kind==='lan'&&!d)toast('데스크탑에 연결하지 못했습니다. 같은 와이파이인지, 데스크탑 프로그램이 켜져 있는지 확인하세요');
   DB=d?normalize(d):((Host.kind==='gas'||Host.kind==='lan')?blankDB():demoDB());
   if(Host.kind==='gas'){
-    if(!DB.local.key){
-      render();
-      const ov=modal(`<h3>연동 비밀번호</h3><p class="muted">관리자에게 받은 비밀번호를 입력하세요. 이 기기에 기억됩니다.</p><div class="form"><label class="full">비밀번호<input type="password" id="gk"></label></div><div class="mfoot"><button class="btn pri" id="gkOk">확인</button></div>`);
-      await new Promise(r=>ov.querySelector('#gkOk').onclick=()=>{DB.local.key=ov.querySelector('#gk').value;ov.remove();r()});
+    let msg='';
+    for(;;){
+      if(!DB.local.key){render();DB.local.key=await askKey(msg);if(!DB.local.key)continue;}
+      try{const remote=await gasPull();const local=DB.local;if((remote.members||[]).length)DB=normalize(mergeData(DB,remote));DB.local=local;ls.set(LSKEY,JSON.stringify(DB));IDX=null;break}
+      catch(e){const m=e.message||String(e);if(/비밀번호/.test(m)){DB.local.key='';ls.set(LSKEY,JSON.stringify(DB));msg='비밀번호가 맞지 않습니다. 다시 입력하세요.';continue}toast('구글시트를 읽지 못했습니다: '+m);break}
     }
-    try{const remote=await gasPull();const local=DB.local;if((remote.members||[]).length)DB=normalize(mergeData(DB,remote));DB.local=local;ls.set(LSKEY,JSON.stringify(DB));IDX=null}catch(e){toast('구글시트를 읽지 못했습니다: '+(e.message||e))}
   }
   if(!d&&Host.kind!=='lan')Host.save(DB);
   render();
