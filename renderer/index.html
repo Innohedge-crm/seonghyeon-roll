@@ -537,7 +537,7 @@ R.dash=()=>{
   <div class="row"><button class="btn pri" data-act="go" data-v="att">출석체크 시작</button></div></div>
   <div class="kpis">
     <div class="kpi"><span>정회원 (재적회원)</span><b>${act.filter(m=>m.status==='정회원').length}</b><small>전체 교인 ${act.length}명 · 준회원 ${act.filter(m=>m.status==='준회원').length}명</small></div>
-    <div class="kpi"><span>${sunLbl} 출석 (${fmtK(lastSun)})</span><b>${uniq(lastSun)}</b><small>1·2·3부 중복 제외 · ${sunKeys().map(k=>svcBy(k).name.replace('주일 ','')+' '+per(k)).join(' · ')}</small></div>
+    <div class="kpi"><span>${sunLbl} 출석 ${fmtK(lastSun)}</span><b>${uniq(lastSun)}</b><small>1·2·3부 중복 제외 · ${sunKeys().map(k=>svcBy(k).name.replace('주일 ','')+' '+per(k)).join(' · ')}</small></div>
     <div class="kpi"><span>수요예배 · 금요기도회</span><b>${per('wed')} · ${per('fri')}</b><small>최근 1회 기준</small></div>
     <div class="kpi"><span>살필 교인</span><b>${warnA.length+longA.length}</b><small>${S().warnWeeks}주 이상 결석 · 6개월 이상 ${longA.length}명</small></div>
   </div>
@@ -726,7 +726,7 @@ R.member=()=>{
   const full=activeMembers().filter(m=>m.status==='정회원');
   const asm=full.filter(m=>{const a=ageOf(m.birth);return a==null||a>=s.assemblyAge});
   return `${demoBanner()}<div class="head"><div><h1>정회원 심사</h1><p>정관 제6조: 등록 후 소정 교육 이수 + ${s.eduMonths}개월, 또는 교육 없이 ${s.memberMonths}개월 이상 정기 출석한 세례교인 → 운영위원회 결정</p></div>
-  <div class="row"><button class="btn" data-act="exp" data-r="candidates" data-f="pdf">심사 명단 PDF</button><button class="btn" data-act="exp" data-r="assembly" data-f="xlsx">공동의회 명부 Excel</button><button class="btn" data-act="exp" data-r="assembly" data-f="pdf">공동의회 명부 PDF</button></div></div>
+  <div class="row"><button class="btn" data-act="exp" data-r="candidates" data-f="pdf">심사 명단 PDF</button><button class="btn" data-act="exp" data-r="assembly" data-f="xlsx">공동의회 명부 Excel</button><button class="btn" data-act="exp" data-r="assembly" data-f="pdf">공동의회 명부 PDF</button><button class="btn" data-act="exp" data-r="voters" data-f="pdf">선거인단 명부 PDF</button></div></div>
   <p class="muted">정기 출석 기준: 출석 기록이 있는 주일 중 <b>${s.regularRate}%</b> 이상 (설정에서 변경). 공동의회 회원은 만 ${s.assemblyAge}세 이상 정회원, 선거권은 등록 후 ${s.voteMonths}개월 정기 출석 (정관 제7조·제12조).</p>
   <div class="panel" style="margin-bottom:16px"><div class="row" style="justify-content:space-between;margin-bottom:10px"><h2 style="margin:0">준회원 ${pend.length}명</h2><button class="btn pri" data-act="approve">선택한 교인 운영위 승인</button></div>
   <div class="tbl-wrap"><table><thead><tr><th><input type="checkbox" id="chkAll" aria-label="대상 전체 선택"></th><th>이름</th><th>등록일</th><th class="num">경과</th><th>세례</th><th>교육이수</th><th class="num">주일출석</th><th>판정</th></tr></thead><tbody>
@@ -884,7 +884,7 @@ R.roll=()=>{
   <div class="tbl-wrap"><table><thead><tr>${rep.cols.map((c,i)=>`<th class="${i>3?'num':''}">${esc(c)}</th>`).join('')}</tr></thead><tbody>${rep.rows.map(row=>`<tr>${row.map((v,i)=>`<td class="${i>3?'num':''}">${esc(v)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>
   <div class="panel" style="margin-top:16px"><h2>다른 출력</h2><div class="row">
   <button class="btn" data-act="exp" data-r="members" data-f="xlsx">교인명부 Excel</button><button class="btn" data-act="exp" data-r="members" data-f="pdf">교인명부 PDF</button>
-  <button class="btn" data-act="exp" data-r="assembly" data-f="pdf">공동의회 회원명부 PDF</button><button class="btn" data-act="exp" data-r="absent" data-f="pdf">결석자 명단 PDF</button>
+  <button class="btn" data-act="exp" data-r="assembly" data-f="pdf">공동의회 회원명부 PDF</button><button class="btn" data-act="exp" data-r="voters" data-f="pdf">선거인단 명부 PDF</button><button class="btn" data-act="exp" data-r="absent" data-f="pdf">결석자 명단 PDF</button>
   <button class="btn" data-act="exp" data-r="all" data-f="xlsx">전체 데이터 Excel (시트별)</button></div></div>`;
 };
 after.roll=()=>{$('#rollMonth').onchange=e=>{if(e.target.value){UI.roll.month=e.target.value;render()}}};
@@ -910,6 +910,11 @@ function buildReport(kind,arg){
     const list=activeMembers().filter(m=>m.status==='정회원'&&(ageOf(m.birth)==null||ageOf(m.birth)>=s.assemblyAge)).sort((a,b)=>ko(a.name,b.name));
     return {title:`${church} 공동의회 회원명부`,sub:`${fmtY(T)} 기준 · ${list.length}명 · 정관 제12조 (만 ${s.assemblyAge}세 이상 정회원)`,cols:['번호','이름','직분','구역','등록일','정회원 승인일','선거권','확인'],
       rows:list.map((m,i)=>[i+1,m.name,m.title||'',m.district||'',fmtY(m.regDate),fmtY(m.approvedDate),voteRight(m)?'○':'',''])  ,sheet:'공동의회명부'};
+  }
+  if(kind==='voters'){
+    const list=activeMembers().filter(m=>m.status==='정회원'&&(ageOf(m.birth)==null||ageOf(m.birth)>=s.assemblyAge)&&voteRight(m)).sort((a,b)=>ko(a.name,b.name));
+    return {title:`${church} 선거인단 명부`,sub:`${fmtY(T)} 기준 · ${list.length}명 · 정관 제7조 (공동의회 회원 중 등록 ${s.voteMonths}개월 이상 정기 출석)`,cols:['번호','이름','직분','구역','등록일','정회원 승인일','투표 확인'],
+      rows:list.map((m,i)=>[i+1,m.name,m.title||'',m.district||'',fmtY(m.regDate),fmtY(m.approvedDate),'']),sheet:'선거인단명부'};
   }
   if(kind==='candidates'){
     const list=activeMembers().filter(m=>m.status==='준회원').map(m=>[m,eligibility(m)]).filter(x=>x[1].ok).sort((a,b)=>ko(a[0].name,b[0].name));
