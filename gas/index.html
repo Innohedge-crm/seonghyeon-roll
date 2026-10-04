@@ -140,6 +140,9 @@ body.tablet .card .nm{font-size:21px}
 .list{display:flex;flex-direction:column}
 .list > div{display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid var(--line)}
 .list > div:last-child{border-bottom:0}
+.list > div.has-sub{flex-wrap:wrap}
+.list .subnames{flex-basis:100%;margin:2px 0 0;font-size:14px;line-height:1.6}
+.list .subnames span{white-space:nowrap}
 .sync{font-size:13px}
 @media (max-width:860px){
   .app{grid-template-columns:1fr}
@@ -545,12 +548,10 @@ R.dash=()=>{
     </div>
     <div class="panel"><h2>처리할 일</h2><div class="list">
       <div><span>정회원 심사 대상 (운영위 승인 필요)</span><button class="btn sm" data-act="go" data-v="member">${cand.length}명</button></div>
-      <div><span>${S().warnWeeks}주 이상 결석</span><button class="btn sm" data-act="go" data-v="abs">${warnA.length}명</button></div>
+      <div class="has-sub"><span>${S().warnWeeks}주 이상 결석</span><button class="btn sm" data-act="go" data-v="abs">${warnA.length}명</button>${warnA.length?`<p class="muted subnames">${warnA.map(m=>[m,absence(m).days]).sort((x,y)=>y[1]-x[1]).slice(0,15).map(([m,d])=>`<span>${esc(m.name)}(${Math.floor(d/7)}주)</span>`).join(' · ')}${warnA.length>15?` 외 ${warnA.length-15}명`:''}</p>`:''}</div>
       <div><span>6개월 이상 결석 (정관 제9조 별명부 대상)</span><button class="btn sm" data-act="go" data-v="abs">${longA.length}명</button></div>
-      <div><span>${mo}월 생일</span><button class="btn sm" data-act="go" data-v="bday">${bd.length}명</button></div>
+      <div class="has-sub"><span>${mo}월 생일</span><button class="btn sm" data-act="go" data-v="bday">${bd.length}명</button>${bd.length?`<p class="muted subnames">${bd.slice(0,12).map(m=>`<span>${esc(m.name)}${bDay(m.birth)?' '+bDay(m.birth)+'일':''}${m.lunar?'(음)':''}</span>`).join(' · ')}${bd.length>12?` 외 ${bd.length-12}명`:''}</p>`:''}</div>
     </div>
-    ${warnA.length?`<p class="muted" style="margin:10px 0 0"><b>${S().warnWeeks}주 이상 결석</b> · ${warnA.map(m=>[m,absence(m).days]).sort((x,y)=>y[1]-x[1]).slice(0,15).map(([m,d])=>`${esc(m.name)}(${Math.floor(d/7)}주)`).join(' · ')}${warnA.length>15?` 외 ${warnA.length-15}명`:''}</p>`:''}
-    ${bd.length?`<p class="muted" style="margin:8px 0 0"><b>${mo}월 생일</b> · ${bd.slice(0,12).map(m=>`${esc(m.name)}${bDay(m.birth)?' '+bDay(m.birth)+'일':''}${m.lunar?'(음)':''}`).join(' · ')}${bd.length>12?` 외 ${bd.length-12}명`:''}</p>`:''}
     </div>
   </div>`;
 };
