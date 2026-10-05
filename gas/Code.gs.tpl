@@ -105,6 +105,12 @@ function normBirth_(v) {
   if (m && +m[1] >= 1 && +m[1] <= 12) return p2(m[1]);
   return v;
 }
+function normDist_(v) {
+  // '3', '3 구역', '3구' → '3구역'
+  v = String(v == null ? '' : v).trim();
+  const m = v.match(/^(\d+)\s*(구역|구)?$/);
+  return m ? m[1] + '구역' : v;
+}
 function normPhone_(v) {
   let d = String(v || '').replace(/[^\d]/g, '');
   if (!d) return String(v || '').trim();
@@ -140,6 +146,7 @@ function readMembers_() {
     ['regDate', 'baptismDate', 'eduDate', 'approvedDate'].forEach(k => { m[k] = normDate_(m[k]); });
     m.birth = normBirth_(m.birth);
     m.phone = normPhone_(m.phone);
+    m.district = normDist_(m.district);
     m.lunar = /음|TRUE|Y/i.test(m.lunar);
     m.deleted = /^(Y|TRUE|삭제)$/i.test(m.deleted);
     m.ministries = m.ministries ? m.ministries.split(/[,、·\/]/).map(s => s.trim()).filter(String) : [];

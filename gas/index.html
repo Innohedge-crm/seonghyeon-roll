@@ -185,6 +185,8 @@ function normBirth(v){
   if((m=v.match(/^(\d{1,2})\s*월?$/))&&+m[1]>=1&&+m[1]<=12)return p2(m[1]);
   return v;
 }
+/* 구역: '3', '3 구역', '3구' → '3구역' */
+function normDist(v){v=String(v==null?'':v).trim();const m=v.match(/^(\d+)\s*(구역|구)?$/);return m?m[1]+'구역':v}
 function birthParts(b){b=String(b||'');let m;
   if((m=b.match(/^(\d{4})-(\d{2})-(\d{2})$/)))return {y:+m[1],m:+m[2],d:+m[3]};
   if((m=b.match(/^(\d{2})-(\d{2})$/)))return {m:+m[1],d:+m[2]};
@@ -623,7 +625,7 @@ R.mem=()=>{const m=UI.mem;return `${demoBanner()}<div class="head"><div><h1>교�
   <div class="tbl-wrap"><table><thead><tr><th>이름</th><th>직분</th><th>구역</th><th>전도회</th><th>봉사</th><th>생일</th><th>등록일</th><th>상태</th><th>최근 출석</th><th class="num">주일출석률</th></tr></thead><tbody id="memBody"></tbody></table></div>`};
 function memFiltered(){
   const f=UI.mem;
-  return members().filter(m=>(f.status==='all'||(f.status==='active'?ACTIVE.has(m.status):m.status===f.status))&&(!f.district||m.district===f.district)&&(!f.title||m.title===f.title)&&(!f.society||m.society===f.society)&&(nameMatch(m.name,f.q)||(m.phone||'').includes(f.q)))
+  return members().filter(m=>(f.status==='all'||(f.status==='active'?ACTIVE.has(m.status):m.status===f.status))&&(!f.district||normDist(m.district)===normDist(f.district))&&(!f.title||m.title===f.title)&&(!f.society||m.society===f.society)&&(nameMatch(m.name,f.q)||(m.phone||'').includes(f.q)))
     .sort((a,b)=>ko(a.name,b.name));
 }
 function renderMemBody(){
@@ -1015,7 +1017,7 @@ after.set=()=>{
 function normalize(d){
   const db=Object.assign(blankDB(),d||{});db.settings=Object.assign(DEFAULT_SETTINGS(),db.settings||{});
   {const t=db.settings.titles=Array.isArray(db.settings.titles)?db.settings.titles.slice():String(db.settings.titles||'').split(/[,\n]/).map(x=>x.trim()).filter(Boolean);[['원로장로','장로'],['은퇴권사','명예권사','권사']].forEach(([n,...after])=>{if(t.includes(n))return;const i=Math.max(...after.map(x=>t.indexOf(x)));t.splice(i<0?t.length:i+1,0,n)});}
-  db.members=(db.members||[]).map(m=>Object.assign({ministries:[],deleted:false},m,{birth:normBirth(m.birth),status:(!m.status||m.status==='재적')?'준회원':m.status,ministries:Array.isArray(m.ministries)?m.ministries:String(m.ministries||'').split(',').map(x=>x.trim()).filter(Boolean)}));db.attendance=db.attendance||{};db.offerings=db.offerings||{};db.logs=db.logs||[];db.local=db.local||{};return db;
+  db.members=(db.members||[]).map(m=>Object.assign({ministries:[],deleted:false},m,{birth:normBirth(m.birth),district:normDist(m.district),status:(!m.status||m.status==='재적')?'준회원':m.status,ministries:Array.isArray(m.ministries)?m.ministries:String(m.ministries||'').split(',').map(x=>x.trim()).filter(Boolean)}));db.attendance=db.attendance||{};db.offerings=db.offerings||{};db.logs=db.logs||[];db.local=db.local||{};return db;
 }
 function stripLocal(db){const o=Object.assign({},db);delete o.local;return o}
 /* 데스크탑 ↔ 구글시트 자동 동기화: 수정 후 5초, 켤 때, 켜져 있는 동안 3분마다 */
