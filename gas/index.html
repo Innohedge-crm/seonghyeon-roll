@@ -545,7 +545,7 @@ R.dash=()=>{
   </div>
   <div class="grid2">
     <div class="panel"><h2>주일 출석 인원 (최근 12주, 1·2·3부 중복 제외)</h2>
-      <div class="bars" role="img" aria-label="최근 12주 주일 출석">${weeks.map((w,i)=>`<div class="bar ${i===11?'last':''}" style="height:${Math.round(w[1]/max*100)}%" title="${fmtK(w[0])} ${w[1]}명">${i===11||i===0||w[1]===Math.max(...weeks.map(x=>x[1]))?`<i>${w[1]}</i>`:''}</div>`).join('')}</div>
+      <div class="bars" role="img" aria-label="최근 12주 주일 출석">${weeks.map((w,i)=>`<div class="bar ${i===11?'last':''}" style="height:${Math.round(w[1]/max*100)}%" title="${fmtK(w[0])} ${w[1]}명"><i>${w[1]}</i></div>`).join('')}</div>
       <div class="bars-x">${weeks.map((w,i)=>`<span>${i%2===1?'':parseD(w[0]).getMonth()+1+'/'+parseD(w[0]).getDate()}</span>`).join('')}</div>
     </div>
     <div class="panel"><h2>처리할 일</h2><div class="list">
