@@ -200,9 +200,11 @@ function write_(sh, header, rows) {
 function readAll_() {
   const out = { version: 1, settings: {}, members: [], attendance: {}, offerings: {}, logs: [] };
   out.members = readMembers_();
-  rows_(sheet_('출석', ['날짜', '예배키', '예배', '인원', '출석자ID', '출석자', '수정시각'])).forEach(r => {
+  rows_(sheet_('출석', ['날짜', '예배키', '예배', '인원', '출석자ID', '출석자', '수정시각', '예배참여(방문) 숫자'])).forEach(r => {
     if (!r[0]) return;
-    out.attendance[r[0] + '|' + r[1]] = { ids: r[4] ? r[4].split(',').filter(String) : [], t: Number(r[6]) || 0 };
+    const rec = { ids: r[4] ? r[4].split(',').filter(String) : [], t: Number(r[6]) || 0 };
+    if (Number(r[7]) > 0) rec.v = Number(r[7]);
+    out.attendance[r[0] + '|' + r[1]] = rec;
   });
   rows_(sheet_('헌금생활', ['날짜', '교인ID', '이름', '참여항목', '수정시각'])).forEach(r => {
     if (!r[0]) return;
@@ -233,9 +235,9 @@ function writeAll_(d) {
 
   const att = Object.keys(d.attendance || {}).sort().reverse().map(k => {
     const [date, svc] = k.split('|'); const v = d.attendance[k];
-    return [date, svc, svcName[svc] || svc, String((v.ids || []).length), (v.ids || []).join(','), (v.ids || []).map(i => names[i] || '?').join(', '), String(v.t || 0)];
+    return [date, svc, svcName[svc] || svc, String((v.ids || []).length), (v.ids || []).join(','), (v.ids || []).map(i => names[i] || '?').join(', '), String(v.t || 0), String(v.v || 0)];
   });
-  write_(sheet_('출석'), ['날짜', '예배키', '예배', '인원', '출석자ID', '출석자', '수정시각'], att);
+  write_(sheet_('출석'), ['날짜', '예배키', '예배', '인원', '출석자ID', '출석자', '수정시각', '예배참여(방문) 숫자'], att);
 
   const off = [];
   Object.keys(d.offerings || {}).sort().reverse().forEach(date => {
