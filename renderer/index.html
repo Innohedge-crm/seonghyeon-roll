@@ -134,6 +134,14 @@ body.tablet .card .nm{font-size:21px}
 .bar{flex:1;background:var(--accent);border-radius:4px 4px 0 0;position:relative;min-width:6px;opacity:.85}
 .bar:hover{opacity:1}
 .bar.last{opacity:1}
+.bar .vseg{position:absolute;left:0;right:0;top:0;background:var(--info);border-radius:4px 4px 0 0;opacity:.75}
+.legend{display:flex;gap:14px;font-size:13px;color:var(--muted);margin:-4px 0 8px}.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
+.vcount{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:10px;padding:4px 6px 4px 12px;background:var(--surface)}
+.vcount span{font-size:14px;font-weight:600;color:var(--info)}
+.vcount b{font-size:22px;min-width:34px;text-align:center;color:var(--info)}
+.vcount .btn{min-width:44px;font-size:20px;line-height:1;padding:6px 10px}
+.card.vis{border-style:dashed}
+.card .vtag{font-size:12.5px;color:var(--info);font-weight:600}
 .bar i{position:absolute;top:-18px;left:50%;transform:translateX(-50%);font-style:normal;font-size:12.5px;color:var(--muted)}
 .bars-x{display:flex;gap:6px;font-size:12.5px;color:var(--muted);margin-top:4px}
 .bars-x span{flex:1;text-align:center;min-width:6px}
@@ -325,9 +333,10 @@ const DEFAULT_SETTINGS=()=>({
   offeringSheetId:'1SEj0VlbOC2xFh16rUCeN2VSQYF5Q7_Ib-t9PHmymHCs',
   demo:false, updatedAt:0
 });
-const STATUSES=['준회원','정회원','별명부','정지','전출','소천','제명'];
+const VIS='예배참여(방문)';
+const STATUSES=['준회원','정회원',VIS,'별명부','정지','전출','소천','제명'];
 const ACTIVE=new Set(['준회원','정회원','별명부','정지']);
-const STATUS_PILL={준회원:'',정회원:'ok',별명부:'warn',정지:'bad',전출:'info',소천:'',제명:'bad'};
+const STATUS_PILL={[VIS]:'info',준회원:'',정회원:'ok',별명부:'warn',정지:'bad',전출:'info',소천:'',제명:'bad'};
 const BAPT=['미세례','학습','유아세례','입교','세례'];
 
 function blankDB(){return {version:1,settings:DEFAULT_SETTINGS(),members:[],attendance:{},offerings:{},logs:[],local:{}}}
@@ -432,6 +441,10 @@ function idx(){
 const mstat=id=>idx().by.get(id)||{days:new Set(),sun:new Set(),last:'',svc:{}};
 const members=()=>DB.members.filter(m=>!m.deleted);
 const activeMembers=()=>members().filter(m=>ACTIVE.has(m.status));
+const visitorMembers=()=>members().filter(m=>m.status===VIS);
+const isVis=id=>{const m=memberById(id);return !!m&&m.status===VIS};
+/* 예배 1회 인원: 교인(이름) · 예배참여(방문)(이름 등록 + 익명 숫자) */
+function svcCount(d,keys){const mem=new Set(),vis=new Set();let anon=0;for(const k of keys){const r=DB.attendance[d+'|'+k]||{};(r.ids||[]).forEach(i=>(isVis(i)?vis:mem).add(i));anon+=(r.v||0)}return {mem:mem.size,vis:vis.size+anon,named:vis.size,anon,total:mem.size+vis.size+anon}}
 const memberById=id=>DB.members.find(m=>m.id===id);
 
 /* 정기출석률: 등록일(또는 최근 12개월) 이후, 출석기록이 있는 주일 중 출석한 주일 비율 */
@@ -526,10 +539,10 @@ const demoBanner=()=>S().demo?`<div class="banner"><span>지금 보이는 교인
 R.dash=()=>{
   const T=today(),act=activeMembers();
   const lastSun=lastDow(0,T);const isSun=lastSun===T;const sunLbl=isSun?'오늘 주일':'지난 주일';
-  const uniq=d=>{const s=new Set();sunKeys().forEach(k=>((DB.attendance[d+'|'+k]||{}).ids||[]).forEach(i=>s.add(i)));return s.size};
-  const per=k=>{const sv=svcBy(k);const d=lastDow(sv.dow,T);return ((DB.attendance[d+'|'+k]||{}).ids||[]).length};
-  const weeks=[];for(let i=11;i>=0;i--){const d=addDays(lastSun,-7*i);weeks.push([d,uniq(d)])}
-  const max=Math.max(10,...weeks.map(w=>w[1]));
+  const sun=d=>svcCount(d,sunKeys());
+  const per=k=>svcCount(lastDow(svcBy(k).dow,T),[k]).total;
+  const weeks=[];for(let i=11;i>=0;i--){const d=addDays(lastSun,-7*i);weeks.push([d,sun(d)])}
+  const max=Math.max(10,...weeks.map(w=>w[1].total));const today_=sun(lastSun);
   const cand=act.filter(m=>m.status==='준회원'&&eligibility(m).ok);
   const longA=act.filter(m=>m.status!=='별명부'&&absence(m).days>=S().longMonths*30);
   const warnA=act.filter(m=>{const a=absence(m).days;return m.status!=='별명부'&&a>=S().warnWeeks*7&&a<S().longMonths*30});
@@ -539,13 +552,13 @@ R.dash=()=>{
   <div class="row"><button class="btn pri" data-act="go" data-v="att">출석체크 시작</button></div></div>
   <div class="kpis">
     <div class="kpi"><span>정회원 (재적회원)</span><b>${act.filter(m=>m.status==='정회원').length}</b><small>전체 교인 ${act.length}명 · 준회원 ${act.filter(m=>m.status==='준회원').length}명</small></div>
-    <div class="kpi"><span>${sunLbl} 출석 ${fmtK(lastSun)}</span><b>${uniq(lastSun)}</b><small>1·2·3부 중복 제외 · ${sunKeys().map(k=>svcBy(k).name.replace('주일 ','')+' '+per(k)).join(' · ')}</small></div>
+    <div class="kpi"><span>${sunLbl} 예배 참여 ${fmtK(lastSun)}</span><b>${today_.total}</b><small>교인 <b style="font-size:inherit;display:inline">${today_.mem}</b> · <span style="color:var(--info)">예배참여(방문) <b style="font-size:inherit;display:inline">${today_.vis}</b></span><br>${sunKeys().map(k=>svcBy(k).name.replace('주일 ','')+' '+per(k)).join(' · ')}</small></div>
     <div class="kpi"><span>수요예배 · 금요기도회</span><b>${per('wed')} · ${per('fri')}</b><small>최근 1회 기준</small></div>
     <div class="kpi"><span>살필 교인</span><b>${warnA.length+longA.length}</b><small>${S().warnWeeks}주 이상 결석 · 6개월 이상 ${longA.length}명</small></div>
   </div>
   <div class="grid2">
-    <div class="panel"><h2>주일 출석 인원 (최근 12주, 1·2·3부 중복 제외)</h2>
-      <div class="bars" role="img" aria-label="최근 12주 주일 출석">${weeks.map((w,i)=>`<div class="bar ${i===11?'last':''}" style="height:${Math.round(w[1]/max*100)}%" title="${fmtK(w[0])} ${w[1]}명"><i>${w[1]}</i></div>`).join('')}</div>
+    <div class="panel"><h2>주일 예배 참여 인원 (최근 12주)</h2><div class="legend"><span><i style="background:var(--accent)"></i>교인 (1·2·3부 중복 제외)</span><span><i style="background:var(--info);opacity:.75"></i>예배참여(방문)·주일학교·어린이</span></div>
+      <div class="bars" role="img" aria-label="최근 12주 주일 출석">${weeks.map((w,i)=>{const c=w[1];return `<div class="bar ${i===11?'last':''}" style="height:${Math.round(c.total/max*100)}%" title="${fmtK(w[0])} 합계 ${c.total}명 (교인 ${c.mem} · 예배참여(방문) ${c.vis})">${c.vis?`<span class="vseg" style="height:${Math.round(c.vis/Math.max(1,c.total)*100)}%"></span>`:''}<i>${c.total}</i></div>`}).join('')}</div>
       <div class="bars-x">${weeks.map((w,i)=>`<span>${i%2===1?'':parseD(w[0]).getMonth()+1+'/'+parseD(w[0]).getDate()}</span>`).join('')}</div>
     </div>
     <div class="panel"><h2>처리할 일</h2><div class="list">
@@ -569,7 +582,7 @@ R.att=()=>{
   attDefaults();const a=UI.att;const sv=svcBy(a.svc);
   const dowWarn=parseD(a.date).getDay()!==sv.dow;
   return `<div class="att-top"><div class="head" style="margin-bottom:10px"><div><h1>${esc(sv.name)} 출석</h1><p>${fmtY(a.date)} (${DOWK[parseD(a.date).getDay()]}) ${dowWarn?pill(DOWK[sv.dow]+'요일이 아닙니다','warn'):''}</p></div>
-    <div class="row"><span class="counter" id="attCount"></span><button class="btn" data-act="tablet">${document.body.classList.contains('tablet')?'관리 화면':'태블릿 모드'}</button></div></div>
+    <div class="row"><span class="counter" id="attCount"></span><div class="vcount" title="이름 없이 숫자로 세는 예배참여(방문)·주일학교·어린이"><span>방문·어린이 숫자</span><button class="btn" data-act="vAdj" data-n="-1" aria-label="한 명 빼기">−</button><b id="vNum">0</b><button class="btn" data-act="vAdj" data-n="1" aria-label="한 명 더하기">+</button></div><button class="btn" data-act="tablet">${document.body.classList.contains('tablet')?'관리 화면':'태블릿 모드'}</button></div></div>
   <div class="toolbar">
     <div class="seg" role="group" aria-label="예배">${svcList().map(s=>`<button data-act="attSvc" data-k="${s.key}" aria-pressed="${s.key===a.svc}">${esc(s.name)}</button>`).join('')}</div>
     <input type="date" id="attDate" value="${a.date}" aria-label="날짜">
@@ -580,26 +593,30 @@ R.att=()=>{
     <select id="attDist" aria-label="구역">${opts(S().districts,a.district,'전체 구역')}</select>
     <div class="seg" role="group" aria-label="보기">${[['all','전체'],['off','미출석'],['on','출석']].map(([k,l])=>`<button data-act="attShow" data-k="${k}" aria-pressed="${a.show===k}">${l}</button>`).join('')}</div>
     <div class="seg" role="group" aria-label="정렬">${[['district','구역순'],['name','가나다']].map(([k,l])=>`<button data-act="attSort" data-k="${k}" aria-pressed="${a.sort===k}">${l}</button>`).join('')}</div>
-    <button class="btn" data-act="quickAdd">+ 새가족</button>
+    <button class="btn" data-act="quickAdd">+ 새가족·방문</button>
   </div></div>
   <div class="cards" id="attGrid"></div>`;
 };
 function renderAttGrid(){
   const a=UI.att,on=attIds();
-  let list=activeMembers().filter(m=>nameMatch(m.name,a.q)&&(!a.district||m.district===a.district));
+  let list=activeMembers().concat(visitorMembers()).filter(m=>nameMatch(m.name,a.q)&&(!a.district||m.district===a.district));
   if(a.show==='on')list=list.filter(m=>on.has(m.id));if(a.show==='off')list=list.filter(m=>!on.has(m.id));
   const di=d=>{const i=S().districts.indexOf(d);return i<0?99:i};
-  list.sort((x,y)=>a.sort==='name'?ko(x.name,y.name):(di(x.district)-di(y.district))||ko(x.name,y.name));
+  const gv=m=>m.status===VIS?1:0;
+  list.sort((x,y)=>(gv(x)-gv(y))||(a.sort==='name'?ko(x.name,y.name):(di(x.district)-di(y.district))||ko(x.name,y.name)));
   let html='',cur=null;
   for(const m of list){
-    if(a.sort==='district'&&m.district!==cur){cur=m.district;html+=`<div class="dist-h">${esc(cur||'구역 미정')}</div>`}
-    const ab=absence(m);const flag=m.status==='별명부'?'별명부':(ab.days>=S().warnWeeks*7&&!on.has(m.id)?`${Math.floor(ab.days/7)}주 결석`:'');
-    html+=`<button class="card ${on.has(m.id)?'on':''}" data-act="tap" data-id="${m.id}" aria-pressed="${on.has(m.id)}"><span class="ck">✓</span><span class="nm">${esc(m.name)}</span><span class="sub">${esc(m.title||'')}${m.district&&a.sort==='name'?' · '+esc(m.district):''}</span>${flag?`<span class="flag">${flag}</span>`:''}</button>`;
+    const grp=m.status===VIS?VIS:(a.sort==='district'?(m.district||'구역 미정'):'');
+    if(grp!==cur){cur=grp;if(grp)html+=`<div class="dist-h">${esc(grp)}</div>`}
+    const ab=absence(m);const flag=m.status===VIS?'':m.status==='별명부'?'별명부':(ab.days>=S().warnWeeks*7&&!on.has(m.id)?`${Math.floor(ab.days/7)}주 결석`:'');
+    const vt=m.status===VIS?`<span class="vtag">방문 ${mstat(m.id).days.size}회</span>`:'';
+    html+=`<button class="card ${on.has(m.id)?'on':''} ${m.status===VIS?'vis':''}" data-act="tap" data-id="${m.id}" aria-pressed="${on.has(m.id)}"><span class="ck">✓</span><span class="nm">${esc(m.name)}</span><span class="sub">${esc(m.title||'')}${m.district&&a.sort==='name'?' · '+esc(m.district):''}</span>${flag?`<span class="flag">${flag}</span>`:''}${vt}</button>`;
   }
   $('#attGrid').innerHTML=html||'<div class="empty" style="grid-column:1/-1">조건에 맞는 교인이 없습니다</div>';
   updateAttCount();
 }
-function updateAttCount(){const n=attIds().size;const el=$('#attCount');if(el)el.innerHTML=`출석 <b>${n}</b>명 / ${activeMembers().length}`}
+function updateAttCount(){const c=svcCount(UI.att.date,[UI.att.svc]);const el=$('#attCount');if(el)el.innerHTML=`교인 <b>${c.mem}</b>/${activeMembers().length} · 예배참여(방문) <b style="color:var(--info)">${c.vis}</b> · 합계 <b>${c.total}</b>명`;const v=$('#vNum');if(v)v.textContent=c.anon}
+function adjVisitors(n){const k=attKey();const rec=DB.attendance[k]||{ids:[],t:0};const v=Math.max(0,(rec.v||0)+n);if(v===(rec.v||0))return;DB.attendance[k]=Object.assign({},rec,{ids:rec.ids||[],v,t:now()});commit();updateAttCount()}
 after.att=()=>{
   renderAttGrid();
   $('#attQ').oninput=e=>{UI.att.q=e.target.value;renderAttGrid()};
@@ -609,7 +626,7 @@ after.att=()=>{
 function toggleAtt(id,btn){
   const k=attKey();const rec=DB.attendance[k]||{ids:[],t:0};const set=new Set(rec.ids);
   set.has(id)?set.delete(id):set.add(id);
-  DB.attendance[k]={ids:[...set],t:now()};commit();
+  DB.attendance[k]=Object.assign({},rec,{ids:[...set],t:now()});commit();
   if(btn){const on=set.has(id);btn.classList.toggle('on',on);btn.setAttribute('aria-pressed',on);const f=btn.querySelector('.flag');if(f&&on&&!/별명부/.test(f.textContent))f.remove()}
   updateAttCount();
 }
@@ -710,14 +727,14 @@ function openMember(id){
   ov.querySelector('#addLog').onclick=()=>{const t=ov.querySelector('#logText').value.trim();if(!t)return;addLog(id,ov.querySelector('#logType').value,t,ov.querySelector('#logDate').value);commit();ov.remove();openMember(id)};
 }
 function quickAdd(){
-  const ov=modal(`<h3>새가족 빠른 등록</h3><p class="muted">등록 후 현재 예배에 바로 출석 처리됩니다. 자세한 정보는 교인관리에서 채웁니다.</p>
-  <div class="form"><label>이름 *<input type="text" id="qaName"></label><label>연락처<input type="tel" id="qaPhone"></label><label>구역<select id="qaDist">${opts(S().districts,'','-')}</select></label><label>세례<select id="qaBap">${opts(BAPT,'세례')}</select></label><label class="full">이전 교회 (이명 전입 시)<input type="text" id="qaPrev"></label></div>
+  const ov=modal(`<h3>새가족·예배참여(방문) 등록</h3><p class="muted">등록 후 현재 예배에 바로 출석 처리됩니다. 처음 오신 분은 '예배참여(방문)'으로, 교회에 등록하는 분은 '준회원'으로 고르세요.</p>
+  <div class="form"><label>이름 *<input type="text" id="qaName"></label><label>연락처<input type="tel" id="qaPhone"></label><label>구역<select id="qaDist">${opts(S().districts,'','-')}</select></label><label>세례<select id="qaBap">${opts(BAPT,'세례')}</select></label><label>상태<select id="qaStat">${opts([VIS,'준회원'],VIS)}</select></label><label class="full">이전 교회 (이명 전입 시)<input type="text" id="qaPrev"></label></div>
   <div class="mfoot"><button class="btn" data-act="close">취소</button><button class="btn pri" id="qaSave">등록하고 출석</button></div>`);
   ov.querySelector('#qaSave').onclick=()=>{
     const name=ov.querySelector('#qaName').value.trim();if(!name){toast('이름을 입력하세요');return}
     const prev=ov.querySelector('#qaPrev').value.trim();
-    const m={id:uid(),name,phone:ov.querySelector('#qaPhone').value.trim(),district:ov.querySelector('#qaDist').value,baptism:ov.querySelector('#qaBap').value,title:'성도',society:'',ministries:[],regDate:UI.att.date||today(),status:'준회원',prevChurch:prev,updatedAt:now(),deleted:false};
-    DB.members.push(m);addLog(m.id,'등록',prev?`새가족 등록 · 이명 전입 (${prev})`:'새가족 등록',m.regDate);
+    const st=ov.querySelector('#qaStat').value||VIS;const m={id:uid(),name,phone:ov.querySelector('#qaPhone').value.trim(),district:ov.querySelector('#qaDist').value,baptism:ov.querySelector('#qaBap').value,title:st===VIS?'':'성도',society:'',ministries:[],regDate:UI.att.date||today(),status:st,prevChurch:prev,updatedAt:now(),deleted:false};
+    DB.members.push(m);addLog(m.id,'등록',m.status===VIS?'예배참여(방문) 등록':prev?`새가족 등록 · 이명 전입 (${prev})`:'새가족 등록',m.regDate);
     ov.remove();toggleAtt(m.id);render();toast(name+' 님 등록·출석 처리');
   };
 }
@@ -1119,6 +1136,7 @@ const ACT={
   go:el=>go(el.dataset.v),
   close:el=>closeModal(el),
   tap:el=>toggleAtt(el.dataset.id,el),
+  vAdj:el=>adjVisitors(+el.dataset.n),
   attSvc:el=>{UI.att.svc=el.dataset.k;const ref=addDays(UI.att.date||today(),6);UI.att.date=lastDow(svcBy(el.dataset.k).dow,ref>today()?today():ref);render()},
   attShift:el=>{UI.att.date=addDays(UI.att.date,+el.dataset.n);render()},
   attShow:el=>{UI.att.show=el.dataset.k;render()},
