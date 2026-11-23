@@ -135,6 +135,14 @@ body.tablet .card .nm{font-size:21px}
 .bar:hover{opacity:1}
 .bar.last{opacity:1}
 .bar .vseg{position:absolute;left:0;right:0;top:0;background:var(--info);border-radius:4px 4px 0 0;opacity:.75}
+@media (max-width:700px){.kpi.kpi-sun{grid-column:1/-1;order:-1}}
+.kpi .brk{border-collapse:collapse;margin:4px 0 6px;font-size:14px;width:100%}
+.kpi .brk th,.kpi .brk td{position:static;background:none;border:0;padding:1px 0;text-align:left;font-weight:500;color:var(--muted);font-size:14px}
+.kpi .brk th{color:var(--fg);font-weight:600;padding-right:8px;white-space:nowrap}
+.kpi .brk td{white-space:nowrap}
+.kpi .brk td:last-child{text-align:right}
+.kpi .brk b{display:inline;font-size:16px;color:var(--fg);font-family:inherit}
+.kpi .brk tr.v th,.kpi .brk tr.v b{color:var(--info)}
 .legend{display:flex;gap:14px;font-size:13px;color:var(--muted);margin:-4px 0 8px}.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:5px;vertical-align:-1px}
 .vcount{display:flex;align-items:center;gap:8px;border:1px solid var(--line);border-radius:10px;padding:4px 6px 4px 12px;background:var(--surface)}
 .vcount span{font-size:14px;font-weight:600;color:var(--info)}
@@ -543,6 +551,10 @@ R.dash=()=>{
   const per=k=>svcCount(lastDow(svcBy(k).dow,T),[k]).total;
   const weeks=[];for(let i=11;i>=0;i--){const d=addDays(lastSun,-7*i);weeks.push([d,sun(d)])}
   const max=Math.max(10,...weeks.map(w=>w[1].total));const today_=sun(lastSun);
+  const sunIds=new Set();sunKeys().forEach(k=>((DB.attendance[lastSun+'|'+k]||{}).ids||[]).forEach(i=>sunIds.add(i)));
+  const stRow=st=>{const all=act.filter(m=>m.status===st);const n=all.filter(m=>sunIds.has(m.id)).length;return {st,all:all.length,n}};
+  const stRows=['정회원','준회원','별명부','정지'].map(stRow).filter(r=>r.st!=='정지'||r.n);
+  const brk=`<table class="brk">${stRows.map(r=>`<tr><th>${r.st}</th><td>${r.all}명 중</td><td><b>${r.n}</b>명</td></tr>`).join('')}<tr class="v"><th colspan="2">방문·기타 (어린이 등)</th><td><b>${today_.vis}</b>명</td></tr></table>`;
   const cand=act.filter(m=>m.status==='준회원'&&eligibility(m).ok);
   const longA=act.filter(m=>m.status!=='별명부'&&absence(m).days>=S().longMonths*30);
   const warnA=act.filter(m=>{const a=absence(m).days;return m.status!=='별명부'&&a>=S().warnWeeks*7&&a<S().longMonths*30});
@@ -552,7 +564,7 @@ R.dash=()=>{
   <div class="row"><button class="btn pri" data-act="go" data-v="att">출석체크 시작</button></div></div>
   <div class="kpis">
     <div class="kpi"><span>정회원 (재적회원)</span><b>${act.filter(m=>m.status==='정회원').length}</b><small>전체 교인 ${act.length}명 · 준회원 ${act.filter(m=>m.status==='준회원').length}명</small></div>
-    <div class="kpi"><span>${sunLbl} 예배 참여 ${fmtK(lastSun)}</span><b>${today_.total}</b><small>교인 <b style="font-size:inherit;display:inline">${today_.mem}</b> · <span style="color:var(--info)">예배참여(방문) <b style="font-size:inherit;display:inline">${today_.vis}</b></span><br>${sunKeys().map(k=>svcBy(k).name.replace('주일 ','')+' '+per(k)).join(' · ')}</small></div>
+    <div class="kpi kpi-sun"><span>${sunLbl} 예배 참여 ${fmtK(lastSun)}</span><b>${today_.total}</b>${brk}<small>${sunKeys().map(k=>svcBy(k).name.replace('주일 ','')+' '+per(k)).join(' · ')}</small></div>
     <div class="kpi"><span>수요예배 · 금요기도회</span><b>${per('wed')} · ${per('fri')}</b><small>최근 1회 기준</small></div>
     <div class="kpi"><span>살필 교인</span><b>${warnA.length+longA.length}</b><small>${S().warnWeeks}주 이상 결석 · 6개월 이상 ${longA.length}명</small></div>
   </div>
